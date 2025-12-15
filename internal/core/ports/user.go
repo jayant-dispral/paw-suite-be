@@ -6,6 +6,9 @@ import (
 	"github.com/jayant-dispral/brand-threat-be/internal/core/domain"
 )
 
+// UserRespository defines how we store users.
+// This interface allows us to mock the DB for unit tests.
+
 type UserRepository interface {
 	Save(ctx context.Context, user domain.User) (string, error)
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
