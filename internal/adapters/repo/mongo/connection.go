@@ -8,8 +8,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// NewConntection creates a scalable MongoDB client
-func NewConntection(uri string) (*mongo.Client, error) {
+// NewConnection creates a scalable MongoDB client
+func NewConnection(uri string) (*mongo.Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
