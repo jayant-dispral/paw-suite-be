@@ -5,13 +5,18 @@ import (
 	"testing"
 
 	"github.com/jayant-dispral/brand-threat-be/internal/adapters/repo/mongo"
+	"github.com/jayant-dispral/brand-threat-be/internal/config"
 	"github.com/jayant-dispral/brand-threat-be/internal/core/domain"
 )
 
 // Requirement: Run 'make docker-up' before running this test
 func TestUserRegistrationFlow(t *testing.T) {
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
 	// 1. Connect to Real DB (Localhost from Docker)
-	client, err := mongo.NewConnection("mongodb://localhost:27017")
+	client, err := mongo.NewConnection(cfg.MongoDBDatabaseURI)
 	if err != nil {
 		t.Fatalf("Failed to connect to DB: %v", err)
 	}
