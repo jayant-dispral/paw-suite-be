@@ -15,6 +15,9 @@ func TestUserRegistrationFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
+	if cfg.MongoDBDatabaseURI == "" {
+		t.Fatal("the connection string cant be empty")
+	}
 	// 1. Connect to Real DB (Localhost from Docker)
 	client, err := mongo.NewConnection(cfg.MongoDBDatabaseURI)
 	if err != nil {
