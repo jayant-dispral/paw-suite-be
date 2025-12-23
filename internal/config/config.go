@@ -11,6 +11,7 @@ import (
 type Config struct {
 	ServerPort         string `mapstructure:"SERVER_PORT" env:"SERVER_PORT"`
 	MongoDBDatabaseURI string `mapstructure:"MONGODB_DATABASE_URI" env:"MONGODB_DATABASE_URI"`
+	JWTSecret          string `mapstructure:"JWT_SECRET" env:"JWT_SECRET"`
 }
 
 func findProjectRoot() (string, error) {
