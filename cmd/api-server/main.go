@@ -1,25 +1,54 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	apiHandler "github.com/jayant-dispral/brand-threat-be/internal/adapters/handler/http"
+	"github.com/jayant-dispral/brand-threat-be/internal/adapters/repo/mongo"
 	"github.com/jayant-dispral/brand-threat-be/internal/config"
+	"github.com/jayant-dispral/brand-threat-be/internal/service/auth"
 )
 
 func main() {
+	// 1. Load Configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Hello"))
-	})
+	// 2. Database Connection
+	dbClient, err := mongo.NewConnection(cfg.MongoDBDatabaseURI)
+	if err != nil {
+		log.Fatalf("Failed to connect to MongoDB: %v", err)
+	}
+	defer dbClient.Disconnect(context.Background())
 
-	http.ListenAndServe(":"+cfg.ServerPort, r)
+	db := dbClient.Database("sentinel_prod")
+
+	// 3. Dependency Injection
+	userRepo := mongo.NewUserRepository(db)
+	authService := auth.NewService(userRepo, cfg.JWTSecret)
+
+	// Create the Handler (The Waiter)
+	authHandler := apiHandler.NewAuthHandler(authService)
+
+	// 4. Setup Router (The Traffic Controller)
+	// Main.go no longer knows about "/auth/login". It just asks for a Router.
+	r := apiHandler.NewRouter(authHandler)
+
+	// 5. Start Server
+	srv := &http.Server{
+		Addr:         ":" + cfg.ServerPort,
+		Handler:      r,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	log.Printf("🚀 Server starting on port %s", cfg.ServerPort)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("Server failed: %v", err)
+	}
 }
