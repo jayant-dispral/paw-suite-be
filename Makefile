@@ -1,4 +1,4 @@
-.PHONY: run infra-up infra-down test clean
+.PHONY: run infra-up infra-down test clean run-api run-worker
 
 APP_ENV ?= dev
 DOCKER_COMPOSE_FILE = docker-compose.yml
@@ -24,6 +24,15 @@ infra-up:
 
 infra-down:
 	docker compose -f $(DOCKER_COMPOSE_FILE) down
+
+# Run the API Server
+run-api:
+	go run cmd/api-server/main.go
+
+# Run the Background Worker
+run-worker:
+	go run cmd/worker/main.go
+
 
 test:
 	APP_ENV=$(APP_ENV) go test ./tests/integration/...
