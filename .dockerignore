@@ -1,0 +1,8 @@
+.env*
+!.env.docker
+.git
+.gitignore
+README.md
+Makefile
+tests/
+*.md

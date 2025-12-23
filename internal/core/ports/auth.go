@@ -8,8 +8,8 @@ type AuthService interface {
 	// Register creates a new user and returns their ID
 	Register(ctx context.Context, email, password string) (string, error)
 
-	// Login verifies credentials and returns a JWT token
-	Login(ctx context.Context, email, password string) (string, error)
+	// Login verifies credentials and returns a JWT token and user ID
+	Login(ctx context.Context, email, password string) (string, string, error)
 
 	// ValidateToken checks if a token is valid and returns the user ID
 	ValidateToken(ctx context.Context, token string) (string, error)

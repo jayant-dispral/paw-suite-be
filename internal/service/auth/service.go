@@ -44,21 +44,26 @@ func (s *service) Register(ctx context.Context, email, password string) (string,
 	return s.repo.Save(ctx, user)
 }
 
-func (s *service) Login(ctx context.Context, email, password string) (string, error) {
+func (s *service) Login(ctx context.Context, email, password string) (string, string, error) {
 	// 1. Find User
 	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
-		return "", errors.New("invalid credentials")
+		return "", "", errors.New("invalid credentials")
 	}
 
 	// 2. Compare Password
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return "", errors.New("invalid credentials")
+		return "", "", errors.New("invalid credentials")
 	}
 
 	// 3. Generate JWT
-	return jwt.GenerateToken(user.ID.Hex(), s.jwtSecret)
+	token, err := jwt.GenerateToken(user.ID.Hex(), s.jwtSecret)
+	if err != nil {
+		return "", "", err
+	}
+
+	return token, user.ID.Hex(), nil
 }
 
 func (s *service) ValidateToken(ctx context.Context, token string) (string, error) {

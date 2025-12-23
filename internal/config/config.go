@@ -1,17 +1,15 @@
 package config
 
 import (
-	"log"
 	"os"
 	"path/filepath"
-
-	"github.com/spf13/viper"
 )
 
 type Config struct {
-	ServerPort         string `mapstructure:"SERVER_PORT" env:"SERVER_PORT"`
-	MongoDBDatabaseURI string `mapstructure:"MONGODB_DATABASE_URI" env:"MONGODB_DATABASE_URI"`
-	JWTSecret          string `mapstructure:"JWT_SECRET" env:"JWT_SECRET"`
+	ServerPort          string `mapstructure:"SERVER_PORT" env:"SERVER_PORT"`
+	MongoDBDatabaseURI  string `mapstructure:"MONGODB_DATABASE_URI" env:"MONGODB_DATABASE_URI"`
+	MongoDBDatabaseName string `mapstructure:"MONGODB_DATABASE_NAME" env:"MONGODB_DATABASE_NAME"`
+	JWTSecret           string `mapstructure:"JWT_SECRET" env:"JWT_SECRET"`
 }
 
 func findProjectRoot() (string, error) {
@@ -33,35 +31,18 @@ func findProjectRoot() (string, error) {
 }
 
 func Load() (*Config, error) {
-	env := os.Getenv("APP_ENV")
-	if env == "" {
-		env = "dev" //default to dev
+	cfg := &Config{
+		ServerPort:          getEnv("SERVER_PORT", "3000"),
+		MongoDBDatabaseURI:  getEnv("MONGODB_DATABASE_URI", ""),
+		MongoDBDatabaseName: getEnv("MONGODB_DATABASE_NAME", "brand_threat"),
+		JWTSecret:           getEnv("JWT_SECRET", "your-super-secret-jwt-key-change-this-in-production"),
 	}
+	return cfg, nil
+}
 
-	root, err := findProjectRoot()
-	if err != nil {
-		log.Printf("Warning: Could not find project root, using system env vars: %v", err)
-		viper.AutomaticEnv()
-		var cfg Config
-		if err := viper.Unmarshal(&cfg); err != nil {
-			return nil, err
-		}
-		return &cfg, nil
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
 	}
-
-	envFile := filepath.Join(root, ".env."+env)
-
-	// Load .env file using viper
-	viper.SetConfigFile(envFile)
-	viper.SetConfigType("env")
-	if err := viper.ReadInConfig(); err != nil {
-		log.Printf("Warning: %s not found, using system env vars: %v", envFile, err)
-	}
-	viper.AutomaticEnv()
-
-	var cfg Config
-	if err := viper.Unmarshal(&cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
+	return defaultValue
 }

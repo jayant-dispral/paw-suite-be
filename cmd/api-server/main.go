@@ -13,20 +13,23 @@ import (
 )
 
 func main() {
+	log.Printf("Starting app")
 	// 1. Load Configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+	log.Printf("Loaded config: %+v", cfg)
 
 	// 2. Database Connection
+	log.Printf("MongoDB URI: %s", cfg.MongoDBDatabaseURI)
 	dbClient, err := mongo.NewConnection(cfg.MongoDBDatabaseURI)
 	if err != nil {
 		log.Fatalf("Failed to connect to MongoDB: %v", err)
 	}
 	defer dbClient.Disconnect(context.Background())
 
-	db := dbClient.Database("sentinel_prod")
+	db := dbClient.Database(cfg.MongoDBDatabaseName)
 
 	// 3. Dependency Injection
 	userRepo := mongo.NewUserRepository(db)

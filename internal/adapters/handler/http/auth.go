@@ -85,12 +85,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.service.Login(r.Context(), req.Email, req.Password)
+	token, userId, err := h.service.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(authResponse{Token: token})
+	json.NewEncoder(w).Encode(authResponse{Token: token, UserId: userId})
 }
