@@ -30,6 +30,8 @@ func NewRouter(authHandler *AuthHandler) *chi.Mux {
 		MaxAge:           300,
 	}))
 
+	r.Use(SecureHeaders)
+
 	// 2. Base Health Check
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Sentinel API is running 🛡️"))
