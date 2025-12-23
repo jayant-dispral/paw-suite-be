@@ -11,20 +11,22 @@ import (
 )
 
 type service struct {
-	repo ports.UserRepository
+	repo      ports.UserRepository
+	jwtSecret string
 }
 
-func NewService(repo ports.UserRepository) ports.AuthService {
+func NewService(repo ports.UserRepository, jwtSecret string) ports.AuthService {
 	return &service{
-		repo: repo,
+		repo:      repo,
+		jwtSecret: jwtSecret,
 	}
 }
 
 func (s *service) Register(ctx context.Context, email, password string) (string, error) {
-	//check if the user existis
+	//check if the user exists
 	existing, _ := s.repo.GetUserByEmail(ctx, email)
 	if existing != nil {
-		return "", errors.New("user already exisits")
+		return "", errors.New("user already exists")
 	}
 
 	//hash password
@@ -43,34 +45,22 @@ func (s *service) Register(ctx context.Context, email, password string) (string,
 }
 
 func (s *service) Login(ctx context.Context, email, password string) (string, error) {
-	//checking if the user exists
+	// 1. Find User
 	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
 		return "", errors.New("invalid credentials")
 	}
 
-	//compare password
+	// 2. Compare Password
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
-
 	if err != nil {
 		return "", errors.New("invalid credentials")
 	}
 
-	tokenStr, err := jwt.CreateToken(email, user.ID.Hex())
-	if err != nil {
-		return "", err
-	}
-
-	return tokenStr, nil
+	// 3. Generate JWT
+	return jwt.GenerateToken(user.ID.Hex(), s.jwtSecret)
 }
 
 func (s *service) ValidateToken(ctx context.Context, token string) (string, error) {
-
-	err := jwt.VerifyToken(token)
-	if err != nil {
-		return "", err
-	}
-
-	//TODO: add logic here
-	return "user_id_123", nil
+	return jwt.VerifyToken(token, s.jwtSecret)
 }
