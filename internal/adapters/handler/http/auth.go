@@ -33,8 +33,8 @@ type loginRequest struct {
 }
 
 type authResponse struct {
-	Token  string `json:"token",omitempty`
-	UserId string `json:"user_id",omitempty`
+	Token  string `json:"token,omitempty"`
+	UserId string `json:"user_id,omitempty"`
 }
 
 // isValidEmail checks if the email format is valid
