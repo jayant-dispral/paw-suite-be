@@ -14,3 +14,7 @@ type UserRepository interface {
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
 	GetUserById(ctx context.Context, id string) (*domain.User, error)
 }
+
+type UserService interface {
+	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
+}
