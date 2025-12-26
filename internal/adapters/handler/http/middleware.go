@@ -2,6 +2,16 @@ package http
 
 import "net/http"
 
+func LimitBodySize(standardLimit int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, standardLimit)
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // SecureHeaders adds security headers to every response
 func SecureHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
