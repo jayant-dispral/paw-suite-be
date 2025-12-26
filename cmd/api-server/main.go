@@ -44,10 +44,18 @@ func main() {
 
 	// 5. Start Server
 	srv := &http.Server{
-		Addr:         ":" + cfg.ServerPort,
-		Handler:      r,
-		ReadTimeout:  10 * time.Second,
+		Addr:    ":" + cfg.ServerPort,
+		Handler: r,
+		// ReadTimeout: Max time to read the request body.
+		// Protects against "Slowloris" attacks (clients sending 1 byte every 30s)
+		ReadTimeout: 5 * time.Second,
+
+		// WriteTimeout: Max time to write the response.
+		// If your DB takes 20s, this cuts the connection at 10s to free resources.
 		WriteTimeout: 10 * time.Second,
+
+		// IdleTimeout: Max time to keep a Keep-Alive connection open.
+		IdleTimeout: 120 * time.Second,
 	}
 
 	log.Printf("🚀 Server starting on port %s", cfg.ServerPort)
