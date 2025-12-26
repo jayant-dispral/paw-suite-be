@@ -26,3 +26,11 @@ func (s *service) GetUserByEmail(ctx context.Context, email string) (*domain.Use
 	}
 	return user, nil
 }
+
+func (s *service) GetUserProfile(ctx context.Context, ID string) (*domain.User, error) {
+	user, err := s.repo.GetUserById(ctx, ID)
+	if err != nil {
+		return nil, errors.New("couldnt find any one with given id")
+	}
+	return user, nil
+}
