@@ -62,7 +62,6 @@ func WithError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrUnauthorized):
 		status = http.StatusForbidden
 		msg = err.Error()
-		// Add more custom errors here as needed
 	default:
 		// Use the error message directly if it doesn't match a sentinel
 		msg = err.Error()
