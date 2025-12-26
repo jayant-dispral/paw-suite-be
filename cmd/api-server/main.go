@@ -10,6 +10,7 @@ import (
 	"github.com/jayant-dispral/brand-threat-be/internal/adapters/repo/mongo"
 	"github.com/jayant-dispral/brand-threat-be/internal/config"
 	"github.com/jayant-dispral/brand-threat-be/internal/service/auth"
+	"github.com/jayant-dispral/brand-threat-be/internal/service/user"
 )
 
 func main() {
@@ -31,16 +32,19 @@ func main() {
 
 	db := dbClient.Database(cfg.MongoDBDatabaseName)
 
-	// 3. Dependency Injection
+	// 3. Dependency Injection "REPO"
 	userRepo := mongo.NewUserRepository(db)
-	authService := auth.NewService(userRepo, cfg.JWTSecret)
 
-	// Create the Handler (The Waiter)
+	authService := auth.NewService(userRepo, cfg.JWTSecret)
+	userService := user.NewService(userRepo)
+
+	// Create the Handlers (The Waiter)
 	authHandler := apiHandler.NewAuthHandler(authService)
+	userHandler := apiHandler.NewUserHandler(userService)
 
 	// 4. Setup Router (The Traffic Controller)
 	// Main.go no longer knows about "/auth/login". It just asks for a Router.
-	r := apiHandler.NewRouter(authHandler)
+	r := apiHandler.NewRouter(authHandler, userHandler)
 
 	// 5. Start Server
 	srv := &http.Server{

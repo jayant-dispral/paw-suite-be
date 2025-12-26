@@ -7,10 +7,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/jayant-dispral/brand-threat-be/internal/core/ports"
 )
 
 // NewRouter initializes the main Chi router and mounts all sub-routers
-func NewRouter(authHandler *AuthHandler) *chi.Mux {
+func NewRouter(authHandler *AuthHandler, userHandler *UserHandler) *chi.Mux {
 	r := chi.NewRouter()
 
 	// 1. Global Middleware (Applied to ALL requests)
@@ -42,7 +43,7 @@ func NewRouter(authHandler *AuthHandler) *chi.Mux {
 		// Mount the Auth sub-router
 		r.Mount("/auth", authRoutes(authHandler))
 
-		// Future: r.Mount("/users", userRoutes(userHandler))
+		r.Mount("/users", userRoutes(userHandler, &authHandler.service))
 		// Future: r.Mount("/payments", paymentRoutes(paymentHandler))
 	})
 
@@ -50,7 +51,6 @@ func NewRouter(authHandler *AuthHandler) *chi.Mux {
 }
 
 // authRoutes defines the sub-routes for Authentication
-// This keeps the main router clean.
 func authRoutes(h *AuthHandler) http.Handler {
 	r := chi.NewRouter()
 
@@ -63,5 +63,15 @@ func authRoutes(h *AuthHandler) http.Handler {
 	//     r.Post("/refresh", h.RefreshToken)
 	// })
 
+	return r
+}
+
+// userRoutes defienes the user routes
+func userRoutes(h *UserHandler, AuthSVC *ports.AuthService) http.Handler {
+	r := chi.NewRouter()
+
+	//auth middleware
+	r.Use(AuthMiddleware(*AuthSVC))
+	r.Get("/me", h.GetMe)
 	return r
 }
