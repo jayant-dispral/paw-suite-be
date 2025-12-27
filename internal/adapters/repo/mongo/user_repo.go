@@ -2,11 +2,14 @@ package mongo
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/jayant-dispral/brand-threat-be/internal/core/domain"
 	"github.com/jayant-dispral/brand-threat-be/internal/core/ports"
+	"github.com/jayant-dispral/brand-threat-be/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -29,7 +32,7 @@ func NewUserRepository(db *mongo.Database) ports.UserRepository {
 			Options: options.Index().SetUnique(true),
 		})
 		if err != nil {
-			panic("failed to create a unique index on users: " + err.Error())
+			log.Printf("failed to create a unique index on users: %v", err)
 		}
 	}()
 
@@ -44,12 +47,15 @@ func (r *MongoUserRepository) Save(ctx context.Context, user domain.User) (strin
 
 	res, err := r.coll.InsertOne(ctx, user)
 	if err != nil {
-		return "", err
+		if strings.Contains(err.Error(), "E11000") || strings.Contains(err.Error(), "duplicate") {
+			return "", errors.NewError(domain.ErrConflict, err)
+		}
+		return "", errors.NewError(domain.ErrInternal, err)
 	}
 
 	oid, ok := res.InsertedID.(primitive.ObjectID)
 	if !ok {
-		return "", errors.New("failed to convert objectid")
+		return "", errors.NewError(domain.ErrInternal, stderrors.New("failed to convert objectid"))
 	}
 	return oid.Hex(), nil
 }
@@ -59,9 +65,9 @@ func (r *MongoUserRepository) GetUserByEmail(ctx context.Context, email string) 
 	err := r.coll.FindOne(ctx, bson.M{"email": email}).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, errors.New("user not found")
+			return nil, errors.NewError(domain.ErrNotFound, err)
 		}
-		return nil, err
+		return nil, errors.NewError(domain.ErrInternal, err)
 	}
 	return &user, nil
 }
@@ -69,16 +75,16 @@ func (r *MongoUserRepository) GetUserByEmail(ctx context.Context, email string) 
 func (r *MongoUserRepository) GetUserById(ctx context.Context, id string) (*domain.User, error) {
 	oid, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		return nil, errors.New("invalid id format")
+		return nil, errors.NewError(domain.ErrInvalidInput, err)
 	}
 
 	var user domain.User
 	err = r.coll.FindOne(ctx, bson.M{"_id": oid}).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, errors.New("user not found")
+			return nil, errors.NewError(domain.ErrNotFound, err)
 		}
-		return nil, err
+		return nil, errors.NewError(domain.ErrInternal, err)
 	}
 	return &user, nil
 }

@@ -2,7 +2,7 @@ package http
 
 import (
 	"context"
-	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -23,14 +23,16 @@ func AuthMiddleware(authSvc ports.AuthService) func(http.Handler) http.Handler {
 			//extract token from the header
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				response.WithError(w, errors.New("missing authorization token in header"))
+				log.Printf("Auth middleware error: missing authorization header")
+				response.WithError(w, domain.ErrUnauthorized)
 				return
 			}
 
 			//Format check
 			parts := strings.Split(authHeader, " ")
 			if len(parts) != 2 || parts[0] != "Bearer" {
-				response.WithError(w, errors.New("invalid header format"))
+				log.Printf("Auth middleware error: invalid header format")
+				response.WithError(w, domain.ErrInvalidInput)
 				return
 			}
 			token := parts[1]
@@ -38,6 +40,7 @@ func AuthMiddleware(authSvc ports.AuthService) func(http.Handler) http.Handler {
 			// 2. validate token (call the auth service)
 			userID, err := authSvc.ValidateToken(r.Context(), token)
 			if err != nil {
+				log.Printf("Auth middleware error: token validation failed: %v", err)
 				response.WithError(w, domain.ErrUnauthorized)
 				return
 			}

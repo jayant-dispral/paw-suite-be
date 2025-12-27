@@ -50,17 +50,29 @@ func WithError(w http.ResponseWriter, err error) {
 	// Smart Error Mapping
 	// This replaces "if err.Error() == ..."
 	switch {
+	case errors.Is(err, domain.ErrInvalidInput):
+		status = http.StatusBadRequest
+		msg = err.Error()
+	case errors.Is(err, domain.ErrInvalidCredentials):
+		status = http.StatusUnauthorized
+		msg = err.Error()
+	case errors.Is(err, domain.ErrTokenExpired):
+		status = http.StatusUnauthorized
+		msg = err.Error()
+	case errors.Is(err, domain.ErrUnauthorized):
+		status = http.StatusUnauthorized
+		msg = err.Error()
+	case errors.Is(err, domain.ErrForbidden):
+		status = http.StatusForbidden
+		msg = err.Error()
 	case errors.Is(err, domain.ErrNotFound):
 		status = http.StatusNotFound
 		msg = err.Error()
 	case errors.Is(err, domain.ErrConflict):
 		status = http.StatusConflict
 		msg = err.Error()
-	case errors.Is(err, domain.ErrInvalidCredentials):
-		status = http.StatusUnauthorized
-		msg = err.Error()
-	case errors.Is(err, domain.ErrUnauthorized):
-		status = http.StatusForbidden
+	case errors.Is(err, domain.ErrInternal):
+		status = http.StatusInternalServerError
 		msg = err.Error()
 	default:
 		// Use the error message directly if it doesn't match a sentinel

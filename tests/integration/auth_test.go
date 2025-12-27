@@ -2,7 +2,7 @@ package integration
 
 import (
 	"context"
-	"strings"
+	"errors"
 	"testing"
 	"time"
 
@@ -80,10 +80,8 @@ func TestUserRepository_Lifecycle(t *testing.T) {
 			t.Fatal("Expected error for duplicate email, got nil")
 		}
 
-		// Check for either the clean error OR the raw Mongo error (E11000)
-		errMsg := err.Error()
-		if errMsg != "email already exists" && !strings.Contains(errMsg, "E11000") && !strings.Contains(errMsg, "duplicate") {
-			t.Errorf("Expected duplicate/exists error, got: %v", err)
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Errorf("Expected ErrConflict, got: %v", err)
 		}
 	})
 
@@ -130,8 +128,8 @@ func TestUserRepository_Lifecycle(t *testing.T) {
 		if err == nil {
 			t.Fatal("Expected error for non-existent user, got nil")
 		}
-		if err.Error() != "user not found" {
-			t.Errorf("Expected 'user not found' error, got: %v", err)
+		if !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("Expected ErrNotFound, got: %v", err)
 		}
 	})
 
