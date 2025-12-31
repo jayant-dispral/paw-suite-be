@@ -46,3 +46,22 @@ func (s *service) GetUserProfile(ctx context.Context, ID string) (*domain.User, 
 	}
 	return user, nil
 }
+
+func (s *service) UpdateUser(ctx context.Context, ID string, update domain.UpdateUserStruct) error {
+	_, err := s.repo.GetUserById(ctx, ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return pkgerrors.NewError(domain.ErrNotFound, err)
+		}
+		return pkgerrors.NewError(domain.ErrInternal, err)
+	}
+
+	//perform the update
+	err = s.repo.UpdateUser(ctx, ID, update)
+	if err != nil {
+		return pkgerrors.NewError(domain.ErrInternal, err)
+	}
+
+	return nil
+
+}
