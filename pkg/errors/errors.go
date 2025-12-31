@@ -15,7 +15,16 @@ func NewError(appErr, svcErr error) Error {
 }
 
 func (e Error) Error() string {
-	return errors.Join(e.svcError, e.appErr).Error()
+	// Return the service error message (detail) if available for better API responses.
+	if e.svcError != nil {
+		return e.svcError.Error()
+	}
+	return e.appErr.Error()
+}
+
+// Unwrap returns the underlying service error to allow errors.As to work
+func (e Error) Unwrap() error {
+	return e.svcError
 }
 
 func (e Error) Is(target error) bool {
