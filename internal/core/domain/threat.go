@@ -28,12 +28,12 @@ type Threat struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	ProjectID primitive.ObjectID `bson:"project_id" json:"project_id"`
 
-	Type     ThreatType   `bson:"type" json:"type"`
-	Status   ThreatStatus `bson:"status" json:"status"`
-	Severity string       `bson:"severity" json:"severity"` // "low", "medium", "high", "critical"
+	Type     ThreatType   `bson:"type" json:"type" validate:"required,oneof=typosquatting impersonation phishing"`
+	Status   ThreatStatus `bson:"status" json:"status" validate:"required,oneof=active acknowledged false_positive resolved"`
+	Severity string       `bson:"severity" json:"severity" validate:"required,oneof=low medium high critical"`
 
 	// Threat Details (polymorphic based on Type)
-	Details ThreatDetails `bson:"details" json:"details"`
+	Details ThreatDetails `bson:"details" json:"details" validate:"required"`
 
 	// Resolution
 	AcknowledgedBy primitive.ObjectID `bson:"acknowledged_by,omitempty" json:"acknowledged_by,omitempty"`
@@ -50,7 +50,7 @@ type Threat struct {
 
 type ThreatDetails struct {
 	// Typosquatting
-	SuspiciousDomain string            `bson:"suspicious_domain,omitempty" json:"suspicious_domain,omitempty"`
+	SuspiciousDomain string            `bson:"suspicious_domain,omitempty" json:"suspicious_domain,omitempty" validate:"omitempty,fqdn"`
 	Registrar        string            `bson:"registrar,omitempty" json:"registrar,omitempty"`
 	RegistrationDate *time.Time        `bson:"registration_date,omitempty" json:"registration_date,omitempty"`
 	DNSRecords       map[string]string `bson:"dns_records,omitempty" json:"dns_records,omitempty"`
@@ -58,11 +58,11 @@ type ThreatDetails struct {
 	// Impersonation
 	Platform      string `bson:"platform,omitempty" json:"platform,omitempty"`
 	FakeHandle    string `bson:"fake_handle,omitempty" json:"fake_handle,omitempty"`
-	ProfileURL    string `bson:"profile_url,omitempty" json:"profile_url,omitempty"`
-	ScreenshotURL string `bson:"screenshot_url,omitempty" json:"screenshot_url,omitempty"`
+	ProfileURL    string `bson:"profile_url,omitempty" json:"profile_url,omitempty" validate:"omitempty,url"`
+	ScreenshotURL string `bson:"screenshot_url,omitempty" json:"screenshot_url,omitempty" validate:"omitempty,url"`
 
 	// Common
-	SimilarityScore float64 `bson:"similarity_score,omitempty" json:"similarity_score,omitempty"` // 0-100%
+	SimilarityScore float64 `bson:"similarity_score,omitempty" json:"similarity_score,omitempty" validate:"min=0,max=100"` // 0-100%
 	Description     string  `bson:"description,omitempty" json:"description,omitempty"`
 }
 

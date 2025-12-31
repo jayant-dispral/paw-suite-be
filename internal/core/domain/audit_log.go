@@ -24,8 +24,8 @@ type AuditLog struct {
 	ProjectID primitive.ObjectID `bson:"project_id" json:"project_id"`
 	UserID    primitive.ObjectID `bson:"user_id" json:"user_id"` // Who performed the action
 
-	Action     AuditAction            `bson:"action" json:"action"`
-	EntityType string                 `bson:"entity_type" json:"entity_type"` // "threat", "alert", "project"
+	Action     AuditAction            `bson:"action" json:"action" validate:"required"`
+	EntityType string                 `bson:"entity_type" json:"entity_type" validate:"required,oneof=threat alert project"`
 	EntityID   primitive.ObjectID     `bson:"entity_id,omitempty" json:"entity_id,omitempty"`
 	Changes    map[string]interface{} `bson:"changes,omitempty" json:"changes,omitempty"` // Before/after values
 	IPAddress  string                 `bson:"ip_address,omitempty" json:"ip_address,omitempty"`
