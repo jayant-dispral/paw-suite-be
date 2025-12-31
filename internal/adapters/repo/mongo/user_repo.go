@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"log"
+	"reflect"
 	"strings"
 	"time"
 
@@ -87,4 +88,58 @@ func (r *MongoUserRepository) GetUserById(ctx context.Context, id string) (*doma
 		return nil, errors.NewError(domain.ErrInternal, err)
 	}
 	return &user, nil
+}
+
+func (r *MongoUserRepository) UpdateUser(ctx context.Context, id string, update domain.UpdateUserStruct) error {
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return errors.NewError(domain.ErrNotFound, err)
+	}
+	updateDoc := buildUpdateDoc(update)
+	if len(updateDoc) == 0 {
+		return nil
+	}
+
+	updateDoc["updated_at"] = time.Now()
+	filter := bson.M{"_id": oid}
+	updateData := bson.M{"$set": updateDoc}
+
+	res, err := r.coll.UpdateOne(ctx, filter, updateData)
+
+	if err != nil {
+		return errors.NewError(domain.ErrInternal, err)
+	}
+
+	if res.MatchedCount == 0 {
+		return errors.NewError(domain.ErrNotFound, stderrors.New("user not found"))
+	}
+
+	return nil
+
+}
+
+// buildUpdateDoc uses reflection to create a BSON document with only non-nil pointer fields
+func buildUpdateDoc(update interface{}) bson.M {
+	updateDoc := bson.M{}
+	v := reflect.ValueOf(update)
+
+	//Derefrence if its a pointer
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	t := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		fieldType := t.Field(i)
+		//Only pointer fileds that are not nil
+		if field.Kind() == reflect.Ptr && !field.IsNil() {
+			bsonTag := fieldType.Tag.Get("bson")
+			if bsonTag != "" && bsonTag != "-" {
+				//For nested structs set, the entire struct
+				updateDoc[bsonTag] = field.Elem().Interface()
+			}
+		}
+	}
+	return updateDoc
 }
