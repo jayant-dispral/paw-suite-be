@@ -95,3 +95,13 @@ type TeamMember struct {
 // 1. {"owner_id": 1, "status": 1, "created_at": -1}
 // 2. {"team_members.user_id": 1} - for finding projects where user is a member
 // 3. {"status": 1, "monitoring_config.platforms": 1} - for active monitoring queries
+
+type CreateProjectRequest struct {
+	Name             string           `json:"name" validate:"required,min=1,max=100"`
+	Description      string           `json:"description"`
+	BrandName        string           `json:"brand_name" validate:"required"`
+	PrimaryDomain    string           `json:"primary_domain"`
+	OfficialHandles  []Handle         `json:"official_handles"`
+	MonitoringConfig MonitoringConfig `json:"monitoring_config" validate:"required"`
+	AlertConfig      AlertConfig      `json:"alert_config" validate:"required"`
+}
