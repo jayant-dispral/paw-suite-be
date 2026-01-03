@@ -47,11 +47,11 @@ type Handle struct {
 }
 
 type MonitoringConfig struct {
-	Keywords     []string `bson:"keywords" json:"keywords" validate:"dive,min=1"`
-	Hashtags     []string `bson:"hashtags" json:"hashtags" validate:"dive"`
-	Handles      []string `bson:"handles" json:"handles" validate:"dive"`
-	Platforms    []string `bson:"platforms" json:"platforms" validate:"dive,oneof=twitter reddit linkedin"`
-	ScanFrequncy int      `bson:"scan_frequncy" json:"scan_frequncy" validate:"required,min=5"` //in minitues (5,10,15..)
+	Keywords      []string `bson:"keywords" json:"keywords" validate:"dive,min=1"`
+	Hashtags      []string `bson:"hashtags" json:"hashtags" validate:"dive"`
+	Handles       []string `bson:"handles" json:"handles" validate:"dive"`
+	Platforms     []string `bson:"platforms" json:"platforms" validate:"dive,oneof=twitter reddit linkedin"`
+	ScanFrequency int      `bson:"scan_frequency" json:"scan_frequency" validate:"required,min=5"` //in minitues (5,10,15..)
 
 	//Threat Radar settings
 	EnableTyposquatting   bool `bson:"enable_typosquatting" json:"enable_typosquatting"`

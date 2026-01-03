@@ -14,6 +14,7 @@ type StandardResponse struct {
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
 	Error   string      `json:"error,omitempty"`
+	Errors  interface{} `json:"errors,omitempty"`
 }
 
 // JSON sends a standard success response with just Data
@@ -39,6 +40,24 @@ func JSONWithMessage(w http.ResponseWriter, status int, message string, data int
 		Status:  "success",
 		Message: message,
 		Data:    data,
+	})
+}
+
+// JSONError sends an error response with custom data
+func JSONError(w http.ResponseWriter, status int, message string, data interface{}) {
+	respond(w, status, StandardResponse{
+		Status:  "error",
+		Message: message,
+		Data:    data,
+	})
+}
+
+// JSONValidation sends a validation error response with the specific errors list
+func JSONValidation(w http.ResponseWriter, errors interface{}) {
+	respond(w, http.StatusBadRequest, StandardResponse{
+		Status:  "error",
+		Message: "Validation failed",
+		Errors:  errors,
 	})
 }
 

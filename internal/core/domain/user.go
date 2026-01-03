@@ -15,6 +15,31 @@ const (
 	TierEnterprise SubscriptionTier = "enterprise"
 )
 
+// DefaultSubscriptionLimits defines the quotas for each tier
+var DefaultSubscriptionLimits = map[SubscriptionTier]Subscription{
+	TierFree: {
+		Tier:              TierFree,
+		MaxProjects:       1,
+		MaxKeywords:       5,
+		DataRetentionDays: 7,
+		APICallsPerMonth:  1000,
+	},
+	TierPro: {
+		Tier:              TierPro,
+		MaxProjects:       10,
+		MaxKeywords:       50,
+		DataRetentionDays: 90,
+		APICallsPerMonth:  50000,
+	},
+	TierEnterprise: {
+		Tier:              TierEnterprise,
+		MaxProjects:       100,
+		MaxKeywords:       500,
+		DataRetentionDays: 365,
+		APICallsPerMonth:  1000000,
+	},
+}
+
 type User struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	Email        string             `bson:"email" json:"email" validate:"required,email"`

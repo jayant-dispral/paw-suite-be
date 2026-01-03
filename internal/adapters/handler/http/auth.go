@@ -4,10 +4,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"regexp"
 
-	"github.com/jayant-dispral/brand-threat-be/internal/core/domain"
 	"github.com/jayant-dispral/brand-threat-be/internal/core/ports"
+	"github.com/jayant-dispral/brand-threat-be/pkg/http/utils"
 	"github.com/jayant-dispral/brand-threat-be/pkg/response"
 )
 
@@ -26,13 +25,13 @@ func NewAuthHandler(svc ports.AuthService) *AuthHandler {
 // Data transfer objects DTOs.
 
 type registerRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=8,max=72"`
 }
 
 type loginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
 }
 
 type authResponse struct {
@@ -40,28 +39,15 @@ type authResponse struct {
 	UserId string `json:"user_id,omitempty"`
 }
 
-// isValidEmail checks if the email format is valid
-func isValidEmail(email string) bool {
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	return emailRegex.MatchString(email)
-}
-
 // RegisterHandler
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.WithError(w, domain.ErrInvalidInput)
-		return
-	}
-
-	//Basic validation
-	if req.Email == "" || req.Password == "" {
-		response.WithError(w, domain.ErrInvalidInput)
-		return
-	}
-
-	if !isValidEmail(req.Email) {
-		response.WithError(w, domain.ErrInvalidInput)
+	if err := utils.DecodeJSON(w, r, &req); err != nil {
+		if vErrs := utils.ParseValidationError(err); vErrs != nil {
+			response.JSONValidation(w, vErrs)
+			return
+		}
+		response.WithError(w, err)
 		return
 	}
 
@@ -80,8 +66,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 // Login Handler
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.WithError(w, domain.ErrInvalidInput)
+	if err := utils.DecodeJSON(w, r, &req); err != nil {
+		if vErrs := utils.ParseValidationError(err); vErrs != nil {
+			response.JSONValidation(w, vErrs)
+			return
+		}
+		response.WithError(w, err)
 		return
 	}
 

@@ -50,16 +50,15 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	var update domain.UpdateUserStruct
 
 	if err := utils.DecodeJSON(w, r, &update); err != nil {
-		if reqErr, ok := err.(*utils.RequestError); ok {
-			response.JSON(w, reqErr.Status, map[string]string{"error": reqErr.Msg})
+		if vErrs := utils.ParseValidationError(err); vErrs != nil {
+			response.JSONValidation(w, vErrs)
 			return
 		}
-		response.WithError(w, domain.ErrInvalidInput)
+		response.WithError(w, err)
 		return
 	}
 
-	err := h.service.UpdateUser(r.Context(), userID, update)
-	if err != nil {
+	if err := h.service.UpdateUser(r.Context(), userID, update); err != nil {
 		response.WithError(w, err)
 		return
 	}

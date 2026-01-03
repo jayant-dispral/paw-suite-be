@@ -19,6 +19,15 @@ func (e *RequestError) Error() string {
 	return e.Msg
 }
 
+// UnknownFieldError wraps the field name for unknown field errors
+type UnknownFieldError struct {
+	Field string
+}
+
+func (e *UnknownFieldError) Error() string {
+	return fmt.Sprintf("Request body contains unknown field %s", e.Field)
+}
+
 // DecodeJSON parses the JSON request body into the destination struct.
 // It handles common edge cases like empty bodies, unknown fields, and malformed JSON.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
@@ -56,15 +65,12 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
 
 		// Catch type mismatches (e.g. string instead of int)
 		case errors.As(err, &unmarshalTypeError):
-			if unmarshalTypeError.Field != "" {
-				return &RequestError{Status: http.StatusBadRequest, Msg: fmt.Sprintf("Request body contains an invalid value for the %q field (at position %d)", unmarshalTypeError.Field, unmarshalTypeError.Offset)}
-			}
-			return &RequestError{Status: http.StatusBadRequest, Msg: fmt.Sprintf("Request body contains an invalid value at position %d", unmarshalTypeError.Offset)}
+			return unmarshalTypeError
 
 		// Catch unknown fields (due to DisallowUnknownFields)
 		case strings.HasPrefix(err.Error(), "json: unknown field "):
 			fieldName := strings.TrimPrefix(err.Error(), "json: unknown field ")
-			return &RequestError{Status: http.StatusBadRequest, Msg: fmt.Sprintf("Request body contains unknown field %s", fieldName)}
+			return &UnknownFieldError{Field: fieldName}
 
 		// Catch empty body
 		case errors.Is(err, io.EOF):
