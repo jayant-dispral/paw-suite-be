@@ -20,23 +20,23 @@ type SocialPost struct {
 	ProjectID primitive.ObjectID `bson:"project_id" json:"project_id"`
 
 	// External Data
-	Platform   string `bson:"platform" json:"platform"`       // "twitter", "reddit", "linkedin"
-	ExternalID string `bson:"external_id" json:"external_id"` // Tweet ID, Reddit post ID
-	Author     string `bson:"author" json:"author"`           // Username/handle
-	AuthorID   string `bson:"author_id" json:"author_id"`     // Platform-specific user ID
-	Content    string `bson:"content" json:"content"`         // Post text
-	URL        string `bson:"url" json:"url"`                 // Direct link to post
+	Platform   string `bson:"platform" json:"platform" validate:"required,oneof=twitter reddit linkedin"`
+	ExternalID string `bson:"external_id" json:"external_id" validate:"required"`
+	Author     string `bson:"author" json:"author" validate:"required"`
+	AuthorID   string `bson:"author_id" json:"author_id" validate:"required"`
+	Content    string `bson:"content" json:"content" validate:"required"`
+	URL        string `bson:"url" json:"url" validate:"required,url"`
 
 	// Analysis
-	Sentiment      Sentiment `bson:"sentiment" json:"sentiment"`
-	SentimentScore float64   `bson:"sentiment_score" json:"sentiment_score"` // -1.0 to 1.0
+	Sentiment      Sentiment `bson:"sentiment" json:"sentiment" validate:"required,oneof=positive neutral negative"`
+	SentimentScore float64   `bson:"sentiment_score" json:"sentiment_score" validate:"min=-1,max=1"` // -1.0 to 1.0
 
 	// Engagement Metrics (updated via idempotent upserts)
-	Likes    int  `bson:"likes" json:"likes"`
-	Shares   int  `bson:"shares" json:"shares"`
-	Comments int  `bson:"comments" json:"comments"`
-	Views    int  `bson:"views" json:"views"`
-	IsViral  bool `bson:"is_viral" json:"is_viral"` // Computed based on AlertConfig.ViralThreshold
+	Likes    int  `bson:"likes" json:"likes" validate:"min=0"`
+	Shares   int  `bson:"shares" json:"shares" validate:"min=0"`
+	Comments int  `bson:"comments" json:"comments" validate:"min=0"`
+	Views    int  `bson:"views" json:"views" validate:"min=0"`
+	IsViral  bool `bson:"is_viral" json:"is_viral"`
 
 	// Metadata
 	PostedAt  time.Time `bson:"posted_at" json:"posted_at"`   // When the post was created on the platform

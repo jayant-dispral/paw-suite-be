@@ -1,0 +1,106 @@
+﻿Sentinel: Brand Threat Management Platform
+Technical Specification & Product Architecture
+Version: 1.0
+Target: MVP / PoC Launch
+Core Objective: Rapid development of a real-time threat detection engine with enterprise-grade reliability.
+Part 1: Product Overview (The "What")
+Sentinel is a backend intelligence engine that protects brands by monitoring the "Digital Wild" (Social Media & Open Web). It detects PR crises and security threats before they escalate.
+Core Modules
+1. Social Sentinel (Monitoring)
+* Goal: Catch negative sentiment and viral complaints instantly.
+* Input: Tracks Keywords (e.g., "Sentinel"), Hashtags (#SentinelApp), and Handles (@SentinelSupport).
+* Features:
+   * Sentiment Analysis: classify posts as Positive, Neutral, or Negative using AI.
+   * Engagement Tracking: Monitor Likes/Shares to prioritize "viral" threats over noise.
+   * Platform: Twitter/X (MVP Focus), designed to scale to Reddit/LinkedIn.
+2. Threat Radar (Security)
+* Goal: Detect attackers trying to impersonate the brand.
+* Features:
+   * Typosquatting Detection: Automatically generates hundreds of "lookalike" domains (e.g., sent1nel.com, sentinel-support.net) and checks if they are registered.
+   * Impersonation Detection: Flags social profiles using the brand's logo or official name unauthorized.
+3. Real-Time Alerting
+* Goal: Notify stakeholders immediately.
+* Triggers:
+   * "Negative Sentiment Spike" (e.g., > 10 negative tweets in 5 mins).
+   * "New Suspicious Domain Registered".
+* Channels: Email (SendGrid/SMTP), Slack Webhooks.
+Part 2: Backend Engineering Breakdown (The "How")
+We are prioritizing Development Velocity without sacrificing System Integrity. The architecture is designed to be "Resume-Ready"—showcasing advanced patterns typically found in senior-level engineering.
+1. High-Level Architecture: The Modular Monolith
+Instead of microservices (which add complexity), we use a Modular Monolith structure in Go.
+* Why Go? Unmatched concurrency for scanning thousands of domains and processing social streams simultaneously.
+* Why Monolith? Zero network latency between components, single deployment pipeline, and shared type safety.
+2. The Tech Stack
+Component
+	Technology
+	Strategic Reasoning
+	Language
+	Go (Golang)
+	High performance, static typing, robust standard library.
+	Router
+	Chi
+	Lightweight, idiomatic, and compatible with standard net/http middleware.
+	Database
+	MongoDB
+	Schema Flexibility. Social data is unstructured; MongoDB allows rapid iteration without complex migrations.
+	Task Queue
+	Asynq + Redis
+	Offloads slow tasks (Scraping, DNS checks) from the API. Ensures the UI remains snappy.
+	Data Source
+	Apify
+	"Buy vs Build." We leverage existing scrapers for Twitter/X to speed up PoC launch.
+	Intelligence
+	OpenAI (GPT-4o)
+	Cost-effective Sentiment Analysis ($0.005 per 1k tokens) vs hosting heavy ML models.
+	Security
+	Bluemonday
+	Prevents XSS in email alerts by sanitizing HTML input.
+	3. Key Engineering Patterns (The "Secret Sauce")
+These are the specific architectural decisions that make Sentinel robust:
+A. Hexagonal Architecture (Ports & Adapters)
+* Concept: The core business logic (Services) never touches external tools (Apify, Mongo) directly. It speaks to Interfaces (Ports).
+* Benefit: We can swap Apify for a custom Scraper in Phase 2 without changing a single line of business logic.
+B. Resiliency: Circuit Breakers
+* Problem: If OpenAI or Apify goes down, our API shouldn't hang.
+* Solution: We wrap external calls in a Circuit Breaker. If errors spike, the system "opens the circuit" and fails fast, protecting resources.
+C. Concurrency: Weighted Semaphores
+* Problem: Launching 10,000 DNS lookups at once will crash the server or get us blacklisted.
+* Solution: We use Semaphores to strictly limit parallel execution (e.g., "Max 50 concurrent scans"), queuing the rest.
+D. Data Integrity: Idempotent Ingestion
+* Problem: Scrapers are messy and often return the same tweet twice.
+* Solution: We use Compound Unique Indexes (platform + external_id) in MongoDB. We "Upsert" data—updating engagement metrics if the tweet exists, inserting if it doesn't. Zero duplicates.
+4. Data Flow Pipelines
+Pipeline A: Social Monitoring (Polling)
+1. Trigger: Worker wakes up every 15 minutes.
+2. Fetch: Calls SocialProvider.Search("Sentinel") (via Apify).
+3. Process:
+   * Filter: Removes duplicates using Redis Bloom Filter (optional) or DB checks.
+   * Analyze: Sends text to OpenAI -> Returns "Negative (0.9)".
+4. Store: Saves to MongoDB mentions collection.
+5. Check: If RiskScore > 0.8, push job to AlertQueue.
+Pipeline B: Threat Scanning (On-Demand / Daily)
+1. Trigger: User adds a new Brand Domain (sentinel.com).
+2. Generate: ThreatService creates 500+ permutations (sent1nel.com, senti-nel.com).
+3. Resolve: Go Routines perform parallel DNS lookups (net.LookupHost).
+4. Filter: Discards domains that don't exist (NXDOMAIN).
+5. Enrich: For active domains, fetches WHOIS data.
+6. Store: Saves to MongoDB threats collection.
+5. Database Schema Strategy
+Collection: brands
+* Configuration for what to track (Keywords, Domains).
+* Index: user_id
+Collection: mentions
+* The raw social data.
+* Index: { brand_id: 1, posted_at: -1 } (For fast dashboard feeds).
+* Unique Index: { platform: 1, external_id: 1 } (Prevents duplicates).
+Collection: threats
+* Detected typosquatting domains.
+* Index: { brand_id: 1, type: 1, status: 1 } (For "Active Threats" view).
+6. Deployment & Security
+* Containerization: Docker & Docker Compose for local dev.
+* Secrets: Managed via .env files (never committed).
+* API Security: * JWT for stateless authentication.
+   * Secure Headers (CSP, X-Frame-Options) via Middleware.
+   * Rate Limiting (via Redis) to prevent abuse.
+Summary:
+Sentinel is not just a wrapper around an API. It is a resilient, concurrent, and scalable system designed to handle the messy reality of the internet while providing clean, actionable intelligence to brands.

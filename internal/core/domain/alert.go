@@ -30,14 +30,14 @@ type Alert struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	ProjectID primitive.ObjectID `bson:"project_id" json:"project_id"`
 
-	Trigger  AlertTrigger `bson:"trigger" json:"trigger"`
-	Status   AlertStatus  `bson:"status" json:"status"`
-	Severity string       `bson:"severity" json:"severity"` // "info", "warning", "critical"
+	Trigger  AlertTrigger `bson:"trigger" json:"trigger" validate:"required,oneof=negative_spike viral_content new_threat manual"`
+	Status   AlertStatus  `bson:"status" json:"status" validate:"required,oneof=pending sent failed acknowledged dismissed"`
+	Severity string       `bson:"severity" json:"severity" validate:"required,oneof=info warning critical"` // "info", "warning", "critical"
 
 	// Alert Content
-	Title     string `bson:"title" json:"title"`
-	Message   string `bson:"message" json:"message"`
-	ActionURL string `bson:"action_url,omitempty" json:"action_url,omitempty"` // Link to relevant dashboard view
+	Title     string `bson:"title" json:"title" validate:"required,max=255"`
+	Message   string `bson:"message" json:"message" validate:"required"`
+	ActionURL string `bson:"action_url,omitempty" json:"action_url,omitempty" validate:"omitempty,url"` // Link to relevant dashboard view
 
 	// Related Entities
 	RelatedPostIDs  []primitive.ObjectID `bson:"related_post_ids,omitempty" json:"related_post_ids,omitempty"`

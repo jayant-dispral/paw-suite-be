@@ -35,7 +35,7 @@ run-worker:
 
 
 test:
-	APP_ENV=$(APP_ENV) go test ./tests/integration/...
+	APP_ENV=$(APP_ENV) go test ./tests/...
 
 build:
 	go build -o bin/api-server cmd/api-server/main.go

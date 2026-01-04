@@ -1,149 +1,116 @@
 package integration
 
 import (
+	"bytes"
 	"context"
-	"strings"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/jayant-dispral/brand-threat-be/internal/adapters/repo/mongo"
-	"github.com/jayant-dispral/brand-threat-be/internal/config"
-	"github.com/jayant-dispral/brand-threat-be/internal/core/domain"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// TestUserRepository_Lifecycle covers the entire CRUD journey and edge cases.
-// Requirement: Run 'make docker-up' before running this test.
-func TestUserRepository_Lifecycle(t *testing.T) {
-	// --- SETUP ---
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
-	}
+func TestAuthHandlers(t *testing.T) {
+	// Clean the user collection before this test suite runs
+	err := testDB.Collection("users").Drop(context.Background())
+	require.NoError(t, err, "Failed to drop users collection for auth tests")
 
-	// Fallback for testing if .env isn't set
-	uri := cfg.MongoDBDatabaseURI
-	if uri == "" {
-		uri = "mongodb://localhost:27017"
-	}
+	// --- REGISTRATION ---
+	t.Run("POST /auth/register - Success", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{
+			"email":    "auth-test@example.com",
+			"password": "password123",
+		})
+		req := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
 
-	client, err := mongo.NewConnection(uri)
-	if err != nil {
-		t.Fatalf("Failed to connect to DB: %v", err)
-	}
+		testRouter.ServeHTTP(rr, req)
 
-	// Use a dedicated test database
-	db := client.Database("sentinel_integration_test")
+		assert.Equal(t, http.StatusCreated, rr.Code)
 
-	// Clean slate: Drop collection before testing
-	// This ensures previous failed tests don't pollute this run
-	_ = db.Collection("users").Drop(context.Background())
-
-	// Initialize Repo (This triggers the Index Creation!)
-	repo := mongo.NewUserRepository(db)
-
-	// Wait a moment for index creation goroutine to finish (Integration test hack)
-	time.Sleep(100 * time.Millisecond)
-
-	// Shared State
-	testEmail := "test@sentinel.com"
-	var createdUserID string
-
-	// --- TESTS ---
-
-	t.Run("1. Create User - Happy Path", func(t *testing.T) {
-		ctx := context.Background()
-		user := domain.User{
-			Email:    testEmail,
-			Password: "hashed_secret_password",
-		}
-
-		id, err := repo.Save(ctx, user)
-		if err != nil {
-			t.Fatalf("Failed to save user: %v", err)
-		}
-		if id == "" {
-			t.Error("Expected valid ID, got empty string")
-		}
-		createdUserID = id // Save for later tests
+		var respBody map[string]interface{}
+		err := json.Unmarshal(rr.Body.Bytes(), &respBody)
+		require.NoError(t, err)
+		assert.NotEmpty(t, respBody["user_id"])
 	})
 
-	t.Run("2. Create Duplicate User - Should Fail", func(t *testing.T) {
-		// Attempt to save the SAME email again
-		ctx := context.Background()
-		user := domain.User{
-			Email:    testEmail, // Same email
-			Password: "different_password",
-		}
+	t.Run("POST /auth/register - Conflict (Email Exists)", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{
+			"email":    "auth-test@example.com", // Same email as above
+			"password": "anotherpassword",
+		})
+		req := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
 
-		_, err := repo.Save(ctx, user)
-		if err == nil {
-			t.Fatal("Expected error for duplicate email, got nil")
-		}
+		testRouter.ServeHTTP(rr, req)
 
-		// Check for either the clean error OR the raw Mongo error (E11000)
-		errMsg := err.Error()
-		if errMsg != "email already exists" && !strings.Contains(errMsg, "E11000") && !strings.Contains(errMsg, "duplicate") {
-			t.Errorf("Expected duplicate/exists error, got: %v", err)
-		}
+		assert.Equal(t, http.StatusConflict, rr.Code)
 	})
 
-	t.Run("3. Get User By Email - Happy Path", func(t *testing.T) {
-		ctx := context.Background()
-		fetchedUser, err := repo.GetUserByEmail(ctx, testEmail)
-		if err != nil {
-			t.Fatalf("Failed to fetch user: %v", err)
-		}
+	t.Run("POST /auth/register - Invalid Input", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{
+			"email": "not-an-email",
+			// Missing password
+		})
+		req := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
 
-		if fetchedUser.Email != testEmail {
-			t.Errorf("Expected email %s, got %s", testEmail, fetchedUser.Email)
-		}
-		// Check if timestamps were set
-		if fetchedUser.CreatedAt.IsZero() {
-			t.Error("Expected CreatedAt to be set, got Zero time")
-		}
+		testRouter.ServeHTTP(rr, req)
 
-		// Update the createdUserID with the definitive ID from the DB
-		// This ensures Test 4 uses the correct ID even if Save() returned something slightly different
-		createdUserID = fetchedUser.ID.Hex()
+		assert.Equal(t, http.StatusBadRequest, rr.Code)
 	})
 
-	t.Run("4. Get User By ID - Happy Path", func(t *testing.T) {
-		ctx := context.Background()
-		// Ensure we have an ID to test with
-		if createdUserID == "" {
-			t.Fatal("Skipping test: No createdUserID available from previous steps")
-		}
+	// --- LOGIN ---
+	t.Run("POST /auth/login - Success", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{
+			"email":    "auth-test@example.com",
+			"password": "password123",
+		})
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
 
-		fetchedUser, err := repo.GetUserById(ctx, createdUserID)
-		if err != nil {
-			t.Fatalf("Failed to fetch user by ID: %v", err)
-		}
-		if fetchedUser.Email != testEmail {
-			t.Errorf("Expected email %s, got %s", testEmail, fetchedUser.Email)
-		}
+		testRouter.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+
+		var respBody map[string]interface{}
+		err := json.Unmarshal(rr.Body.Bytes(), &respBody)
+		require.NoError(t, err)
+		assert.NotEmpty(t, respBody["token"])
+		assert.NotEmpty(t, respBody["user_id"])
 	})
 
-	t.Run("5. Get Non-Existent User - Should Fail Gracefully", func(t *testing.T) {
-		ctx := context.Background()
-		_, err := repo.GetUserByEmail(ctx, "ghost@sentinel.com")
+	t.Run("POST /auth/login - Invalid Credentials (Wrong Password)", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{
+			"email":    "auth-test@example.com",
+			"password": "wrong-password",
+		})
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
 
-		if err == nil {
-			t.Fatal("Expected error for non-existent user, got nil")
-		}
-		if err.Error() != "user not found" {
-			t.Errorf("Expected 'user not found' error, got: %v", err)
-		}
+		testRouter.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 	})
 
-	t.Run("6. Context Timeout - Resiliency Check", func(t *testing.T) {
-		// Create a context that dies INSTANTLY
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
-		defer cancel()
+	t.Run("POST /auth/login - User Not Found", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]string{
+			"email":    "not-found@example.com",
+			"password": "password123",
+		})
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
 
-		_, err := repo.GetUserByEmail(ctx, testEmail)
-		if err == nil {
-			t.Fatal("Expected timeout error, got success")
-		}
-		// MongoDB driver usually returns "context deadline exceeded"
+		testRouter.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 	})
 }

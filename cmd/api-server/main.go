@@ -10,6 +10,7 @@ import (
 	"github.com/jayant-dispral/brand-threat-be/internal/adapters/repo/mongo"
 	"github.com/jayant-dispral/brand-threat-be/internal/config"
 	"github.com/jayant-dispral/brand-threat-be/internal/service/auth"
+	"github.com/jayant-dispral/brand-threat-be/internal/service/user"
 )
 
 func main() {
@@ -31,23 +32,34 @@ func main() {
 
 	db := dbClient.Database(cfg.MongoDBDatabaseName)
 
-	// 3. Dependency Injection
+	// 3. Dependency Injection "REPO"
 	userRepo := mongo.NewUserRepository(db)
-	authService := auth.NewService(userRepo, cfg.JWTSecret)
 
-	// Create the Handler (The Waiter)
+	authService := auth.NewService(userRepo, cfg.JWTSecret)
+	userService := user.NewService(userRepo)
+
+	// Create the Handlers (The Waiter)
 	authHandler := apiHandler.NewAuthHandler(authService)
+	userHandler := apiHandler.NewUserHandler(userService)
 
 	// 4. Setup Router (The Traffic Controller)
 	// Main.go no longer knows about "/auth/login". It just asks for a Router.
-	r := apiHandler.NewRouter(authHandler)
+	r := apiHandler.NewRouter(authHandler, userHandler)
 
 	// 5. Start Server
 	srv := &http.Server{
-		Addr:         ":" + cfg.ServerPort,
-		Handler:      r,
-		ReadTimeout:  10 * time.Second,
+		Addr:    ":" + cfg.ServerPort,
+		Handler: r,
+		// ReadTimeout: Max time to read the request body.
+		// Protects against "Slowloris" attacks (clients sending 1 byte every 30s)
+		ReadTimeout: 5 * time.Second,
+
+		// WriteTimeout: Max time to write the response.
+		// If your DB takes 20s, this cuts the connection at 10s to free resources.
 		WriteTimeout: 10 * time.Second,
+
+		// IdleTimeout: Max time to keep a Keep-Alive connection open.
+		IdleTimeout: 120 * time.Second,
 	}
 
 	log.Printf("🚀 Server starting on port %s", cfg.ServerPort)

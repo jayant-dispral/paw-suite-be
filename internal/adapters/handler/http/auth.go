@@ -2,10 +2,13 @@ package http
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"regexp"
 
+	"github.com/jayant-dispral/brand-threat-be/internal/core/domain"
 	"github.com/jayant-dispral/brand-threat-be/internal/core/ports"
+	"github.com/jayant-dispral/brand-threat-be/pkg/response"
 )
 
 // Auth handler wraps the logic so that the http requests can talk to it
@@ -47,29 +50,26 @@ func isValidEmail(email string) bool {
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		response.WithError(w, domain.ErrInvalidInput)
 		return
 	}
 
 	//Basic validation
 	if req.Email == "" || req.Password == "" {
-		http.Error(w, "Email and password are required", http.StatusBadRequest)
+		response.WithError(w, domain.ErrInvalidInput)
 		return
 	}
 
 	if !isValidEmail(req.Email) {
-		http.Error(w, "Invalid email format", http.StatusBadRequest)
+		response.WithError(w, domain.ErrInvalidInput)
 		return
 	}
 
 	//calling the service
 	userId, err := h.service.Register(r.Context(), req.Email, req.Password)
 	if err != nil {
-		if err.Error() == "user already exists" { // Simple string check for PoC
-			http.Error(w, err.Error(), http.StatusConflict)
-			return
-		}
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		log.Printf("Auth register error: %v", err)
+		response.WithError(w, err)
 		return
 	}
 
@@ -81,13 +81,14 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		response.WithError(w, domain.ErrInvalidInput)
 		return
 	}
 
 	token, userId, err := h.service.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		log.Printf("Auth login error: %v", err)
+		response.WithError(w, err)
 		return
 	}
 
