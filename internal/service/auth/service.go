@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"log"
+	"time"
 
 	"github.com/jayant-dispral/brand-threat-be/internal/core/domain"
 	"github.com/jayant-dispral/brand-threat-be/internal/core/ports"
+	"github.com/jayant-dispral/brand-threat-be/internal/service/user"
 	pkgerrors "github.com/jayant-dispral/brand-threat-be/pkg/errors"
 	"github.com/jayant-dispral/brand-threat-be/pkg/jwt"
 	"golang.org/x/crypto/bcrypt"
@@ -24,7 +26,7 @@ func NewService(repo ports.UserRepository, jwtSecret string) ports.AuthService {
 	}
 }
 
-func (s *service) Register(ctx context.Context, email, password string) (string, error) {
+func (s *service) Register(ctx context.Context, email, password, fullName string) (string, error) {
 	//check if the user exists
 	existing, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {
@@ -43,13 +45,19 @@ func (s *service) Register(ctx context.Context, email, password string) (string,
 		return "", pkgerrors.NewError(domain.ErrInternal, err)
 	}
 
+	//default settings
+	subscription := user.NewSubscription(domain.TierFree, time.Now(), nil)
+
 	//save user
-	user := domain.User{
+	newUser := domain.User{
 		Email:    email,
 		Password: string(hashed),
+		FullName: fullName,
 	}
+	newUser.Subscription = *subscription
+	newUser.Preferences = *user.NewPreference()
 
-	id, err := s.repo.Save(ctx, user)
+	id, err := s.repo.Save(ctx, newUser)
 	if err != nil {
 		log.Printf("Auth service register error: failed to save user: %v", err)
 		return "", pkgerrors.NewError(domain.ErrInternal, err)

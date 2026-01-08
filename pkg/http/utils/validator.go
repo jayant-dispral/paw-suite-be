@@ -2,7 +2,6 @@ package utils
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 	"strings"
 
@@ -33,13 +32,8 @@ func ValidateStruct(s interface{}) error {
 	if err != nil {
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
-			var errorMsgs []string
-			for _, e := range validationErrors {
-				// Build a friendly error message
-				msg := fmt.Sprintf("Field '%s' failed validation on the '%s' tag", e.Field(), e.Tag())
-				errorMsgs = append(errorMsgs, msg)
-			}
-			return pkgErrors.NewError(domain.ErrInvalidInput, errors.New(strings.Join(errorMsgs, "; ")))
+			// Return the original validation error so it can be type-asserted upstream
+			return validationErrors
 		}
 		return pkgErrors.NewError(domain.ErrInvalidInput, err)
 	}

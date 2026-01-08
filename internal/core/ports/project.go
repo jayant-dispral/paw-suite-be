@@ -15,3 +15,7 @@ type ProjectRepository interface {
 	Delete(ctx context.Context, id primitive.ObjectID) error
 	CountByOwnerID(ctx context.Context, ownerID primitive.ObjectID) (int64, error)
 }
+
+type ProjectService interface {
+	CreateProject(ctx context.Context, ownerID primitive.ObjectID, req *domain.CreateProjectRequest) (*domain.Project, error)
+}

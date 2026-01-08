@@ -11,7 +11,7 @@ import (
 )
 
 // NewRouter initializes the main Chi router and mounts all sub-routers
-func NewRouter(authHandler *AuthHandler, userHandler *UserHandler) *chi.Mux {
+func NewRouter(authHandler *AuthHandler, userHandler *UserHandler, projectHanlder *ProjectHandler) *chi.Mux {
 	r := chi.NewRouter()
 
 	// 1. Global Middleware (Applied to ALL requests)
@@ -44,7 +44,8 @@ func NewRouter(authHandler *AuthHandler, userHandler *UserHandler) *chi.Mux {
 		r.Mount("/auth", authRoutes(authHandler))
 
 		r.Mount("/users", userRoutes(userHandler, &authHandler.service))
-		// Future: r.Mount("/payments", paymentRoutes(paymentHandler))
+
+		r.Mount("/projects", projectRoutes(projectHanlder, &authHandler.service))
 	})
 
 	return r
@@ -74,5 +75,15 @@ func userRoutes(h *UserHandler, AuthSVC *ports.AuthService) http.Handler {
 	r.Use(AuthMiddleware(*AuthSVC))
 	r.Get("/me", h.GetMe)
 	r.Post("/me", h.UpdateUser)
+	return r
+}
+
+// projectRoutes defines the project routes
+func projectRoutes(h *ProjectHandler, AuthSVC *ports.AuthService) http.Handler {
+	r := chi.NewRouter()
+
+	//auth middleware
+	r.Use(AuthMiddleware(*AuthSVC))
+	r.Post("/", h.CreateProject)
 	return r
 }
