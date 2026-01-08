@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"time"
 
 	"github.com/jayant-dispral/brand-threat-be/internal/core/domain"
 	"github.com/jayant-dispral/brand-threat-be/internal/core/ports"
@@ -17,6 +18,26 @@ type service struct {
 func NewService(repo ports.UserRepository) ports.UserService {
 	return &service{
 		repo: repo,
+	}
+}
+
+func NewSubscription(tier domain.SubscriptionTier, startDate time.Time, endDate *time.Time) *domain.Subscription {
+
+	return &domain.Subscription{
+		Tier:              tier,
+		StartDate:         startDate,
+		EndDate:           endDate,
+		MaxProjects:       10,
+		MaxKeywords:       10000,
+		DataRetentionDays: 30,
+		APICallsPerMonth:  50000,
+	}
+}
+
+func NewPreference() *domain.UserPreferences {
+	return &domain.UserPreferences{
+		EmailNotifications: true,
+		Timezone:           "Indian",
 	}
 }
 

@@ -6,7 +6,7 @@ import "context"
 // This is the "Input Port" that your HTTP Handlers will call.
 type AuthService interface {
 	// Register creates a new user and returns their ID
-	Register(ctx context.Context, email, password string) (string, error)
+	Register(ctx context.Context, email, password, fullName string) (string, error)
 
 	// Login verifies credentials and returns a JWT token and user ID
 	Login(ctx context.Context, email, password string) (string, string, error)

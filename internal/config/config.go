@@ -32,7 +32,7 @@ func findProjectRoot() (string, error) {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		ServerPort: getEnv("SERVER_PORT", "3000"),
+		ServerPort: getEnv("SERVER_PORT", "8080"),
 		//TODO:P1:fix the env fetching system NONE IS WORKING
 		MongoDBDatabaseURI:  getEnv("MONGODB_DATABASE_URI", "mongodb://admin:password@localhost:27017/brand_threat?authSource=admin"),
 		MongoDBDatabaseName: getEnv("MONGODB_DATABASE_NAME", "brand_threat"),
