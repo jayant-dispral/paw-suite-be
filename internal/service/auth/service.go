@@ -71,7 +71,7 @@ func (s *service) Login(ctx context.Context, email, password string) (string, st
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			log.Printf("Auth service login error: user not found: %s", email)
-			return "", "", pkgerrors.NewError(domain.ErrInvalidCredentials, err)
+			return "", "", pkgerrors.NewError(domain.ErrInvalidCredentials, errors.New("No user found with the given email"))
 		}
 		log.Printf("Auth service login error: failed to get user: %v", err)
 		return "", "", pkgerrors.NewError(domain.ErrInternal, err)
@@ -81,7 +81,7 @@ func (s *service) Login(ctx context.Context, email, password string) (string, st
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
 		log.Printf("Auth service login error: invalid password for user: %s", email)
-		return "", "", pkgerrors.NewError(domain.ErrInvalidCredentials, err)
+		return "", "", pkgerrors.NewError(domain.ErrInvalidCredentials, errors.New("Invalid password"))
 	}
 
 	// 3. Generate JWT
