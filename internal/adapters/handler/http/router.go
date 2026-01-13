@@ -85,5 +85,6 @@ func projectRoutes(h *ProjectHandler, AuthSVC *ports.AuthService) http.Handler {
 	//auth middleware
 	r.Use(AuthMiddleware(*AuthSVC))
 	r.Post("/", h.CreateProject)
+	r.Get("/", h.GetMyProjects)
 	return r
 }
