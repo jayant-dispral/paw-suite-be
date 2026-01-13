@@ -6,6 +6,8 @@ import (
 
 	"github.com/jayant-dispral/brand-threat-be/internal/core/domain"
 	"github.com/jayant-dispral/brand-threat-be/internal/core/ports"
+	pkgerrors "github.com/jayant-dispral/brand-threat-be/pkg/errors"
+	"github.com/jayant-dispral/brand-threat-be/pkg/http/utils"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -74,4 +76,35 @@ func (s *ProjectService) CreateProject(ctx context.Context, ownerID primitive.Ob
 	}
 
 	return project, nil
+}
+
+func (s *ProjectService) GetProjectDetails(ctx context.Context, projectIDStr, userIDStr string) (*domain.Project, error) {
+	projectID, err := utils.HexToObjectID(projectIDStr)
+	if err != nil {
+		return nil, err
+	}
+
+	project, err := s.projectRepo.FindByID(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	if project == nil {
+		return nil, fmt.Errorf("Project is empty")
+	}
+
+	var userExistsInTeam = false
+	for _, teamMember := range project.TeamMembers {
+		if teamMember.UserID.Hex() == userIDStr {
+			userExistsInTeam = true
+			break
+		}
+	}
+
+	if project.OwnerID.Hex() != userIDStr && !userExistsInTeam {
+		return nil, pkgerrors.NewError(domain.ErrForbidden, fmt.Errorf("access denied: you must be the project owner or a team member to view this project"))
+	}
+
+	return project, nil
+
 }

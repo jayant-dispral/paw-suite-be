@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jayant-dispral/brand-threat-be/internal/core/domain"
 	"github.com/jayant-dispral/brand-threat-be/internal/core/ports"
 	"github.com/jayant-dispral/brand-threat-be/pkg/http/utils"
@@ -85,8 +86,24 @@ func (h *ProjectHandler) GetMyProjects(w http.ResponseWriter, r *http.Request) {
 	response.JSONWithMessage(w, http.StatusOK, "Projects fetched successfully", projects)
 }
 
-// func (h *ProjectHandler) GetProjects(w http.ResponseWriter, r *http.Request) {
-// 	userId, ok := r.Context().Value(UserIDKey).(primitive.ObjectID)
+func (h *ProjectHandler) GetProjectDetails(w http.ResponseWriter, r *http.Request) {
+	projectIDStr := chi.URLParam(r, "projectID")
+	if projectIDStr == "" {
+		response.WithError(w, domain.ErrInvalidInput)
+		return
+	}
 
-// 	projects, err := h.projectService.
-// }
+	userIDStr, ok := r.Context().Value(UserIDKey).(string)
+	if !ok {
+		response.WithError(w, domain.ErrUnauthorized)
+		return
+	}
+
+	project, err := h.projectService.GetProjectDetails(r.Context(), projectIDStr, userIDStr)
+	if err != nil {
+		response.WithError(w, err)
+		return
+	}
+
+	response.JSONWithMessage(w, http.StatusOK, "Project details fetched successfully", project)
+}
