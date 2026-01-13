@@ -18,4 +18,5 @@ type ProjectRepository interface {
 
 type ProjectService interface {
 	CreateProject(ctx context.Context, ownerID primitive.ObjectID, req *domain.CreateProjectRequest) (*domain.Project, error)
+	GetProjectsByUserId(ctx context.Context, ownerId primitive.ObjectID) ([]domain.Project, error)
 }

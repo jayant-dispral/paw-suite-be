@@ -21,6 +21,14 @@ func NewProjectService(projectRepo ports.ProjectRepository, userRepo ports.UserR
 	}
 }
 
+func (s *ProjectService) GetProjectsByUserId(ctx context.Context, ownerId primitive.ObjectID) ([]domain.Project, error) {
+	projects, err := s.projectRepo.FindByOwnerID(ctx, ownerId)
+	if err != nil {
+
+	}
+	return projects, err
+}
+
 // CreateProject validated subscription limits and creates a new project
 func (s *ProjectService) CreateProject(ctx context.Context, ownerID primitive.ObjectID, req *domain.CreateProjectRequest) (*domain.Project, error) {
 
