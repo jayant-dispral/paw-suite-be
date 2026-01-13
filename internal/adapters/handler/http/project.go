@@ -59,11 +59,30 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//4. Return success response
-	w.Header().Set("Content-Type", "application/json")
 	response.JSONWithMessage(w, http.StatusCreated, "Create new project success fully", map[string]interface{}{
 		"success": true,
 		"data":    project,
 	})
+}
+
+func (h *ProjectHandler) GetMyProjects(w http.ResponseWriter, r *http.Request) {
+	userIDStr, ok := r.Context().Value(UserIDKey).(string)
+	if !ok {
+		// this should never happen cause AuthMiddleware will reject if not present
+		response.WithError(w, domain.ErrUnauthorized)
+		return
+	}
+	userID, err := utils.HexToObjectID(userIDStr)
+	if err != nil {
+		response.WithError(w, err)
+	}
+	projects, err := h.projectService.GetProjectsByUserId(r.Context(), userID)
+
+	if err != nil {
+		response.WithError(w, err)
+	}
+
+	response.JSONWithMessage(w, http.StatusOK, "Projects fetched successfully", projects)
 }
 
 // func (h *ProjectHandler) GetProjects(w http.ResponseWriter, r *http.Request) {
