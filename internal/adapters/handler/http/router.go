@@ -87,5 +87,14 @@ func projectRoutes(h *ProjectHandler, AuthSVC *ports.AuthService) http.Handler {
 	r.Post("/", h.CreateProject)
 	r.Get("/", h.GetMyProjects)
 	r.Get("/{projectID}", h.GetProjectDetails)
+	r.Put("/{projectID}", h.UpdateProjectDetails)
+	r.Delete("/{projectID}", h.DeleteProject)
+	r.Put("/{projectID}/status", h.UpdateProjectStatus)
+	r.Put("/{projectID}/monitoring", h.UpdateMonitoringConfig)
+	r.Put("/{projectID}/alerts", h.UpdateAlertConfig)
+	r.Post("/{projectID}/team", h.AddTeamMember)
+	r.Put("/{projectID}/team/{userId}", h.UpdateTeamMemberRole)
+	r.Delete("/{projectID}/team/{userId}", h.RemoveTeamMember)
+	r.Get("/{projectID}/team", h.GetTeamMembers)
 	return r
 }
