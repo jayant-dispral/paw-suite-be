@@ -20,4 +20,13 @@ type ProjectService interface {
 	CreateProject(ctx context.Context, ownerID primitive.ObjectID, req *domain.CreateProjectRequest) (*domain.Project, error)
 	GetProjectsByUserId(ctx context.Context, ownerId primitive.ObjectID) ([]domain.Project, error)
 	GetProjectDetails(ctx context.Context, projectIDStr, userIDStr string) (*domain.Project, error)
+	UpdateProjectDetails(ctx context.Context, projectIDStr, userIDStr string, req *domain.UpdateProjectRequest) (*domain.Project, error)
+	DeleteProject(ctx context.Context, projectIDStr, userIDStr string) error
+	UpdateProjectStatus(ctx context.Context, projectIDStr, userIDStr string, req *domain.UpdateProjectStatusRequest) error
+	UpdateMonitoringConfig(ctx context.Context, projectIDStr, userIDStr string, req *domain.MonitoringConfig) error
+	UpdateAlertConfig(ctx context.Context, projectIDStr, userIDStr string, req *domain.AlertConfig) error
+	AddTeamMember(ctx context.Context, projectIDStr, userIDStr string, req *domain.AddTeamMemberRequest) error
+	UpdateTeamMemberRole(ctx context.Context, projectIDStr, userIDStr, memberUserIDStr string, req *domain.UpdateTeamMemberRoleRequest) error
+	RemoveTeamMember(ctx context.Context, projectIDStr, userIDStr, memberUserIDStr string) error
+	GetTeamMembers(ctx context.Context, projectIDStr, userIDStr string) ([]domain.TeamMember, error)
 }
