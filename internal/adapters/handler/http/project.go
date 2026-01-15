@@ -60,10 +60,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//4. Return success response
-	response.JSONWithMessage(w, http.StatusCreated, "Create new project success fully", map[string]interface{}{
-		"success": true,
-		"data":    project,
-	})
+	response.JSONWithMessage(w, http.StatusCreated, "Create new project success fully", project)
 }
 
 func (h *ProjectHandler) GetMyProjects(w http.ResponseWriter, r *http.Request) {
