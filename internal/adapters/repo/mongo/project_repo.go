@@ -8,6 +8,7 @@ import (
 
 	"github.com/jayant-dispral/brand-threat-be/internal/core/domain"
 	"github.com/jayant-dispral/brand-threat-be/internal/core/ports"
+	pkgerrors "github.com/jayant-dispral/brand-threat-be/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -125,7 +126,7 @@ func (r *MongoProjectRepository) FindByID(ctx context.Context, projectID primiti
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("project not found")
+			return nil, pkgerrors.NewError(domain.ErrNotFound, fmt.Errorf("project not found"))
 		}
 		return nil, fmt.Errorf("failed to find project: %w", err)
 	}

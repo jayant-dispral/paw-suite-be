@@ -105,3 +105,26 @@ type CreateProjectRequest struct {
 	MonitoringConfig MonitoringConfig `json:"monitoring_config" validate:"required"`
 	AlertConfig      AlertConfig      `json:"alert_config" validate:"required"`
 }
+
+type UpdateProjectRequest struct {
+	Name             *string           `json:"name,omitempty"`
+	Description      *string           `json:"description,omitempty"`
+	BrandName        *string           `json:"brand_name,omitempty"`
+	PrimaryDomain    *string           `json:"primary_domain,omitempty"`
+	OfficialHandles  *[]Handle         `json:"official_handles,omitempty"`
+	MonitoringConfig *MonitoringConfig `json:"monitoring_config,omitempty"`
+	AlertConfig      *AlertConfig      `json:"alert_config,omitempty"`
+}
+
+type UpdateProjectStatusRequest struct {
+	Status ProjectStatus `json:"status" validate:"required,oneof=active paused archived"`
+}
+
+type AddTeamMemberRequest struct {
+	UserID string         `json:"user_id" validate:"required"`
+	Role   TeamMemberRole `json:"role" validate:"required,oneof=admin editor viewer"`
+}
+
+type UpdateTeamMemberRoleRequest struct {
+	Role TeamMemberRole `json:"role" validate:"required,oneof=admin editor viewer"`
+}
