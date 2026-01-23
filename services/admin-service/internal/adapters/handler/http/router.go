@@ -38,6 +38,10 @@ func NewRouter(authHandler *AuthHandler, userHandler *UserHandler, projectHanlde
 		w.Write([]byte("Sentinel API is running 🛡️"))
 	})
 
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+	})
+
 	// 3. Mount API Versions
 	r.Route("/api/v1", func(r chi.Router) {
 		// Mount the Auth sub-router
