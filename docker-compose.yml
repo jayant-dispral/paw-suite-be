@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: brand-threat-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: brand_threat
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - brand-threat-network
+
+  api-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: brand-threat-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      SERVER_PORT: "3000"
+      MONGODB_DATABASE_URI: "mongodb://admin:password@mongodb:27017/brand_threat?authSource=admin"
+      MONGODB_DATABASE_NAME: brand_threat
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      APP_ENV: dev
+    depends_on:
+      - mongodb
+    networks:
+      - brand-threat-network
+
+volumes:
+  mongo_data:
+
+networks:
+  brand-threat-network:
+    driver: bridge
