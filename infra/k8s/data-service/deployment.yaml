@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-service
+  namespace: paw-suite
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-service
+  template:
+    metadata:
+      labels:
+        app: data-service
+    spec:
+      containers:
+        - name: data-service
+          image: data-service:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+          env:
+            - name: SERVER_PORT
+              value: "8081"
+
+            - name: MONGODB_DATABASE_URI
+              value: "mongodb://admin:password@mongo:27017/brand_threat?authSource=admin"
+
+            - name: MONGODB_DATABASE_NAME
+              value: "brand_threat"
