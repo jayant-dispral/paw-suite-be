@@ -19,7 +19,7 @@ func NewRouter() *chi.Mux {
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("data service end point health"))
+		w.Write([]byte("Data Service healthy ;)\n"))
 	})
 
 	return  r
