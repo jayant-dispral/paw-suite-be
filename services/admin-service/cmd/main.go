@@ -65,6 +65,7 @@ func main() {
 		for {
 			<- ticker.C
 			event := mocks.GenerateMockBrandMoniterEvent()
+			log.Printf("Pumping event: %v in pipeline", event)
 			kafkaProducer.SendBrandSearch(context.Background(), *event)
 		}
 	}()
