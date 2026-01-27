@@ -1,6 +1,24 @@
 # use the existing kind cluster
-
 k8s_context('kind-paw-suite')
+
+#load the extension so tilt knows how to handle helm
+load('ext://helm_remote', "helm_remote")
+
+#deploy kafka
+helm_remote("kafka",
+    repo_name="bitnami",
+    repo_url="https://charts.bitnami.com/bitnami",
+    chart="kafka",
+    version="31.3.1"
+    values=[
+        'kraft.enabled=true',      
+        'zookeeper.enabled=false', 
+        'replicaCount=1',          
+        'persistence.enabled=false' 
+    ]
+)
+
+k8s_resource('kafka', port_forwards="9094:9092")
 
 # build the admin -service image
 docker_build(
