@@ -9,9 +9,11 @@ import (
 	apiHandler "github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/adapters/handler/http"
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/adapters/repository/mongo"
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/config"
+	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/infrastructure/events"
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/auth"
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/project"
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/user"
+	"github.com/jayant-dispral/brand-threat-be/services/admin-service/pkg/mocks"
 )
 
 func main() {
@@ -49,6 +51,24 @@ func main() {
 	// 4. Setup Router (The Traffic Controller)
 	// Main.go no longer knows about "/auth/login". It just asks for a Router.
 	r := apiHandler.NewRouter(authHandler, userHandler, projectHandler)
+
+	//5. setup kafka producers
+	kafkaProducer := events.NewProducer([]string{"kafka.paw-suite.svc.cluster.local:9092"}, "brand-moniter")
+	if kafkaProducer == nil {
+		log.Fatal("Kafka producer failed to start")
+	}
+
+	//mock event generate
+	ticker := time.NewTicker(5 *time.Second)
+	defer ticker.Stop()
+	go func() {
+		for {
+			<- ticker.C
+			event := mocks.GenerateMockBrandMoniterEvent()
+			kafkaProducer.SendBrandSearch(context.Background(), *event)
+		}
+	}()
+	
 
 	// 5. Start Server
 	srv := &http.Server{
