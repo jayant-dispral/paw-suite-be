@@ -2,7 +2,7 @@ package domain
 
 import "time"
 
-type BrandSearchEvent struct {
+type BrandMoniterEvent struct {
 	ProjectID   string    `json:"project_id"`
 	KeyWord     string    `json:"key_word"`
 	RequestedBy string    `json:"requested_by"`
