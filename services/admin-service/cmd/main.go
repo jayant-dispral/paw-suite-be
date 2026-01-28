@@ -59,17 +59,20 @@ func main() {
 	}
 
 	//mock event generate
-	ticker := time.NewTicker(5 *time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	go func() {
+		log.Printf("started the go routine")
 		for {
-			<- ticker.C
+			<-ticker.C
 			event := mocks.GenerateMockBrandMoniterEvent()
 			log.Printf("Pumping event: %v in pipeline", event)
-			kafkaProducer.SendBrandSearch(context.Background(), *event)
+			if err := kafkaProducer.SendBrandSearch(context.Background(), *event); err != nil {
+				log.Printf("Failed to send event: %v", err)
+			}
+			log.Printf("Generating mock event: %+v", event)
 		}
 	}()
-	
 
 	// 5. Start Server
 	srv := &http.Server{
