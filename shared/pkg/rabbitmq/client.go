@@ -27,7 +27,7 @@ type Client struct {
 	cancel context.CancelFunc
 }
 
-// NewClient creates a new RabbitMQ client
+// NewClient creates a new RabbitMQ client with retry logic for initial connection
 func NewClient(config *Config) (*Client, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -43,8 +43,8 @@ func NewClient(config *Config) (*Client, error) {
 		cancel:        cancel,
 	}
 	
-	// Initial connection
-	if err := client.connect(); err != nil {
+	// Initial connection with retry logic
+	if err := client.connectWithRetry(); err != nil {
 		cancel()
 		return nil, fmt.Errorf("initial connection failed: %w", err)
 	}
@@ -53,6 +53,40 @@ func NewClient(config *Config) (*Client, error) {
 	go client.maintainConnection()
 	
 	return client, nil
+}
+
+// connectWithRetry attempts to connect with exponential backoff
+func (c *Client) connectWithRetry() error {
+	retryDelay := c.config.InitialRetryDelay
+	attempts := 0
+	
+	for {
+		attempts++
+		
+		log.Printf("[RabbitMQ] Initial connection attempt %d...", attempts)
+		if err := c.connect(); err != nil {
+			log.Printf("[RabbitMQ] Connection attempt %d failed: %v", attempts, err)
+			
+			// Check if we've exceeded max attempts (0 = infinite)
+			if c.config.MaxReconnectAttempts > 0 && attempts >= c.config.MaxReconnectAttempts {
+				return fmt.Errorf("max connection attempts (%d) reached", c.config.MaxReconnectAttempts)
+			}
+			
+			log.Printf("[RabbitMQ] Retrying in %v...", retryDelay)
+			time.Sleep(retryDelay)
+			
+			// Exponential backoff with cap
+			retryDelay = time.Duration(float64(retryDelay) * c.config.RetryMultiplier)
+			if retryDelay > c.config.MaxRetryDelay {
+				retryDelay = c.config.MaxRetryDelay
+			}
+			
+			continue
+		}
+		
+		log.Printf("[RabbitMQ] Connected successfully after %d attempts", attempts)
+		return nil
+	}
 }
 
 // connect establishes the initial connection
