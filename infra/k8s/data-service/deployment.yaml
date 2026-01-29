@@ -14,17 +14,41 @@ spec:
         app: data-service
     spec:
       containers:
-        - name: data-service
-          image: data-service:dev
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 8081
-          env:
-            - name: SERVER_PORT
-              value: "8081"
-
-            - name: MONGODB_DATABASE_URI
-              value: "mongodb://admin:password@mongo:27017/brand_threat?authSource=admin"
-
-            - name: MONGODB_DATABASE_NAME
-              value: "brand_threat"
+      - name: data-service
+        image: data-service:dev
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+          name: http
+        env:
+        # Existing environment variables
+        - name: MONGO_URI
+          value: "mongodb://mongo:27017"
+        
+        # RabbitMQ Configuration
+        - name: RABBITMQ_URL
+          value: "amqp://guest:guest@rabbitmq:5672/"
+        - name: RABBITMQ_EXCHANGE
+          value: "brand_events"
+        - name: RABBITMQ_QUEUE
+          value: "data_service_queue"
+        
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        
+        livenessProbe:
+          tcpSocket:
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        
+        readinessProbe:
+          tcpSocket:
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
