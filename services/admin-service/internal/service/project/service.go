@@ -343,13 +343,17 @@ func (s *ProjectService) AddTeamMember(ctx context.Context, projectIDStr, userID
 	}
 
 	// Check if user is already a member
-	memberUserID, err := primitive.ObjectIDFromHex(req.UserID)
+	inviteeUser, err := s.userRepo.GetUserByEmail(ctx, req.UserEmail)
+	if err != nil {
+		return  pkgerrors.NewError(domain.ErrNotFound, fmt.Errorf("user with email %s not found", req.UserEmail))
+	}
+	
 	if err != nil {
 		return pkgerrors.NewError(domain.ErrInvalidInput, fmt.Errorf("invalid user_id"))
 	}
 
 	for _, tm := range project.TeamMembers {
-		if tm.UserID == memberUserID {
+		if tm.UserID == inviteeUser.ID {
 			return pkgerrors.NewError(domain.ErrConflict, fmt.Errorf("user is already a team member"))
 		}
 	}
@@ -360,7 +364,7 @@ func (s *ProjectService) AddTeamMember(ctx context.Context, projectIDStr, userID
 		return pkgerrors.NewError(domain.ErrInvalidInput, fmt.Errorf("invalid user_id for added_by"))
 	}
 	newMember := domain.TeamMember{
-		UserID:  memberUserID,
+		UserID:  inviteeUser.ID,
 		Role:    req.Role,
 		AddedAt: time.Now(),
 		AddedBy: addedBy,
