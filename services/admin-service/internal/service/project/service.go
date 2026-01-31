@@ -347,10 +347,6 @@ func (s *ProjectService) AddTeamMember(ctx context.Context, projectIDStr, userID
 	if err != nil {
 		return  pkgerrors.NewError(domain.ErrNotFound, fmt.Errorf("user with email %s not found", req.UserEmail))
 	}
-	
-	if err != nil {
-		return pkgerrors.NewError(domain.ErrInvalidInput, fmt.Errorf("invalid user_id"))
-	}
 
 	for _, tm := range project.TeamMembers {
 		if tm.UserID == inviteeUser.ID {
