@@ -64,7 +64,7 @@ func (p *RabbitMQEventPublisher) PublishBrandMonitorEvent(ctx context.Context, e
 	}
 
 	log.Printf("[EventPublisher] Published BrandMonitorEvent (project: %s, keyword: %s)",
-		event.ProjectID, event.KeyWord)
+		event.ProjectID, event.KeyWords)
 
 	return nil
 }

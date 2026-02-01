@@ -71,7 +71,7 @@ func (g *MockEventGenerator) generateAndPublish(ctx context.Context) {
 	}
 
 	log.Printf("[MockEventGenerator] ✓ Published mock event: Project=%s, Keyword=%s",
-		event.ProjectID, event.KeyWord)
+		event.ProjectID, event.KeyWords)
 }
 
 // createMockEvent generates a realistic mock BrandMonitorEvent
@@ -104,7 +104,7 @@ func (g *MockEventGenerator) createMockEvent() *domain.BrandMonitorEvent {
 
 	return &domain.BrandMonitorEvent{
 		ProjectID:   projects[rand.Intn(len(projects))],
-		KeyWord:     keywords[rand.Intn(len(keywords))],
+		KeyWords:     keywords[0:rand.Intn(len(keywords))],
 		RequestedBy: users[rand.Intn(len(users))],
 		TimeStamp:   time.Now(),
 	}
