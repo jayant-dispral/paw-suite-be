@@ -17,6 +17,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// Ensure MongoUserRepository implements ports.UserRepository
+var _ ports.UserRepository = (*MongoUserRepository)(nil)
+
 type MongoUserRepository struct {
 	coll *mongo.Collection
 }
@@ -116,6 +119,130 @@ func (r *MongoUserRepository) UpdateUser(ctx context.Context, id string, update 
 
 	return nil
 
+}
+
+// Delete removes a user by ID permanently
+func (r *MongoUserRepository) Delete(ctx context.Context, id string) error {
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return errors.NewError(domain.ErrInvalidInput, err)
+	}
+
+	filter := bson.M{"_id": oid}
+	res, err := r.coll.DeleteOne(ctx, filter)
+	if err != nil {
+		return errors.NewError(domain.ErrInternal, err)
+	}
+
+	if res.DeletedCount == 0 {
+		return errors.NewError(domain.ErrNotFound, stderrors.New("user not found"))
+	}
+
+	return nil
+}
+
+// ListUsers returns a paginated list of users with optional filtering
+func (r *MongoUserRepository) ListUsers(ctx context.Context, filter ports.UserFilter) ([]domain.User, error) {
+	// Build filter document
+	filterDoc := bson.M{}
+	if filter.SubscriptionTier != nil {
+		filterDoc["subscription.tier"] = *filter.SubscriptionTier
+	}
+	if filter.Email != nil {
+		filterDoc["email"] = bson.M{"$regex": *filter.Email, "$options": "i"}
+	}
+
+	// Set default pagination values
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100 // Max limit to prevent abuse
+	}
+
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Set default sort
+	sortBy := filter.SortBy
+	if sortBy == "" {
+		sortBy = "created_at"
+	}
+	sortOrder := filter.SortOrder
+	if sortOrder == 0 {
+		sortOrder = -1 // Default to descending (newest first)
+	}
+
+	opts := options.Find().
+		SetLimit(limit).
+		SetSkip(offset).
+		SetSort(bson.D{{Key: sortBy, Value: sortOrder}})
+
+	cursor, err := r.coll.Find(ctx, filterDoc, opts)
+	if err != nil {
+		return nil, errors.NewError(domain.ErrInternal, err)
+	}
+	defer cursor.Close(ctx)
+
+	var users []domain.User
+	if err = cursor.All(ctx, &users); err != nil {
+		return nil, errors.NewError(domain.ErrInternal, err)
+	}
+
+	return users, nil
+}
+
+// Count returns the total number of users matching the filter
+func (r *MongoUserRepository) Count(ctx context.Context, filter ports.UserFilter) (int64, error) {
+	// Build filter document (same as ListUsers but without pagination)
+	filterDoc := bson.M{}
+	if filter.SubscriptionTier != nil {
+		filterDoc["subscription.tier"] = *filter.SubscriptionTier
+	}
+	if filter.Email != nil {
+		filterDoc["email"] = bson.M{"$regex": *filter.Email, "$options": "i"}
+	}
+
+	count, err := r.coll.CountDocuments(ctx, filterDoc)
+	if err != nil {
+		return 0, errors.NewError(domain.ErrInternal, err)
+	}
+
+	return count, nil
+}
+
+// ExistsByEmail checks if a user with the given email exists
+func (r *MongoUserRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
+	filter := bson.M{"email": email}
+	count, err := r.coll.CountDocuments(ctx, filter, options.Count().SetLimit(1))
+	if err != nil {
+		return false, errors.NewError(domain.ErrInternal, err)
+	}
+	return count > 0, nil
+}
+
+// FindBySubscriptionTier returns all users with the specified subscription tier
+func (r *MongoUserRepository) FindBySubscriptionTier(ctx context.Context, tier domain.SubscriptionTier) ([]domain.User, error) {
+	filter := bson.M{"subscription.tier": tier}
+	opts := options.Find().SetSort(bson.D{
+		{Key: "created_at", Value: -1},
+	})
+
+	cursor, err := r.coll.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, errors.NewError(domain.ErrInternal, err)
+	}
+	defer cursor.Close(ctx)
+
+	var users []domain.User
+	if err = cursor.All(ctx, &users); err != nil {
+		return nil, errors.NewError(domain.ErrInternal, err)
+	}
+
+	return users, nil
 }
 
 // buildUpdateDoc uses reflection to create a BSON document with only non-nil pointer fields

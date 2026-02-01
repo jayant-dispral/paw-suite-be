@@ -121,7 +121,7 @@ type UpdateProjectStatusRequest struct {
 }
 
 type AddTeamMemberRequest struct {
-	UserID string         `json:"user_id" validate:"required"`
+	UserEmail string         `json:"user_email" validate:"required"`
 	Role   TeamMemberRole `json:"role" validate:"required,oneof=admin editor viewer"`
 }
 
