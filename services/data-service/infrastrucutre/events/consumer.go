@@ -79,7 +79,7 @@ func (c *RabbitMQEventConsumer) handleMessage(ctx context.Context, body []byte) 
 	}
 
 	log.Printf("[EventConsumer] 📨 Received BrandMonitorEvent: Project=%s, Keyword=%s, RequestedBy=%s",
-		event.ProjectID, event.KeyWord, event.RequestedBy)
+		event.ProjectID, event.KeyWords, event.RequestedBy)
 
 	// Delegate to business logic handler
 	if err := c.handler.HandleBrandMonitorEvent(ctx, &event); err != nil {
@@ -89,7 +89,7 @@ func (c *RabbitMQEventConsumer) handleMessage(ctx context.Context, body []byte) 
 	}
 
 	log.Printf("[EventConsumer] ✓ Successfully processed event: Project=%s, Keyword=%s",
-		event.ProjectID, event.KeyWord)
+		event.ProjectID, event.KeyWords)
 
 	return nil // ACK
 }
