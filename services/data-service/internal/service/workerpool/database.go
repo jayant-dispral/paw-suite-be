@@ -22,18 +22,34 @@ func (wp *WorkerPool) saveToDB(post domain.SocialPost) error {
         "external_id": post.ExternalID,
     }
     
-    // Update timestamps
     now := time.Now()
     post.UpdatedAt = now
-    if post.CreatedAt.IsZero() {
-        post.CreatedAt = now
-    }
     
+    // Prepare update document
     update := bson.M{
         "$set": post,
         "$setOnInsert": bson.M{
-            "created_at": now,
+            "created_at": now,  // Only set on insert
         },
+    }
+    
+    // Remove created_at from $set to avoid conflict
+    postBSON, err := bson.Marshal(post)
+    if err != nil {
+        return fmt.Errorf("failed to marshal post: %w", err)
+    }
+    
+    var postMap bson.M
+    if err := bson.Unmarshal(postBSON, &postMap); err != nil {
+        return fmt.Errorf("failed to unmarshal post: %w", err)
+    }
+    
+    // Remove created_at from the map that goes into $set
+    delete(postMap, "created_at")
+    
+    update = bson.M{
+        "$set":         postMap,
+        "$setOnInsert": bson.M{"created_at": now},
     }
     
     opts := options.Update().SetUpsert(true)
