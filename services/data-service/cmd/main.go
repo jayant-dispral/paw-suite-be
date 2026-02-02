@@ -1,21 +1,9 @@
-// FILE PATH: services/data-service/cmd/main.go
-// This is the main entry point for the Data Service with RabbitMQ event consumer integration.
-//
-// INTEGRATION INSTRUCTIONS:
-// 1. If you already have a main.go, MERGE this code into your existing file
-// 2. Add the business logic service initialization (lines 33-35)
-// 3. Add the event consumer initialization (lines 37-50)
-// 4. Add the consumer start in background (lines 52-58)
-// 5. Update your graceful shutdown to call cancel() and eventConsumer.Close()
-//
-// Place this file in: <project-root>/services/data-service/cmd/main.go
-
+// services/data-service/cmd/main.go
 package main
 
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,29 +11,71 @@ import (
 
 	"github.com/jayant-dispral/brand-threat-be/services/data-service/infrastrucutre/events"
 	"github.com/jayant-dispral/brand-threat-be/services/data-service/internal/service"
-	apiHandler "github.com/jayant-dispral/brand-threat-be/services/data-service/internal/adapters/handler/http"
+	"github.com/jayant-dispral/brand-threat-be/services/data-service/internal/service/workerpool"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
-	log.Println("🚀 Starting Data Service...")
+	log.Println("🚀 Starting Data Service with Worker Pool...")
 
 	// ============================================================
 	// CONFIGURATION
 	// ============================================================
 	rabbitmqURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
+	mongoURL := getEnv("MONGODB_DATABASE_URI", "mongodb://admin:password@mongo:27017/brand_threat?authSource=admin")
 	exchangeName := getEnv("RABBITMQ_EXCHANGE", "brand_events")
 	queueName := getEnv("RABBITMQ_QUEUE", "data_service_queue")
-
-	// Routing keys determine which events this service consumes
-	// "brand.#" = all brand events (brand.monitor.scan, brand.alert.created, etc.)
 	routingKeys := []string{"brand.#"}
+
+	// Worker pool configuration
+	apiRateLimit := 10  // requests per second to external API
+	apiWorkers := 40    // concurrent API workers (adjust based on API latency)
+	procWorkers := 5    // concurrent processing workers
+
+	// ============================================================
+	// CONNECT TO MONGODB
+	// ============================================================
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	mongoClient, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURL))
+	if err != nil {
+		log.Fatalf("❌ Failed to connect to MongoDB: %v", err)
+	}
+	defer func() {
+		if err := mongoClient.Disconnect(context.Background()); err != nil {
+			log.Printf("⚠️  Error disconnecting MongoDB: %v", err)
+		}
+	}()
+
+	// Ping MongoDB
+	if err := mongoClient.Ping(ctx, nil); err != nil {
+		log.Fatalf("❌ Failed to ping MongoDB: %v", err)
+	}
+
+	db := mongoClient.Database("brand_monitoring") // Change to your DB name
+	log.Println("✅ Connected to MongoDB")
+
+	// ============================================================
+	// INITIALIZE WORKER POOL
+	// ============================================================
+	wp := workerpool.NewWorkerPool(apiRateLimit, apiWorkers, procWorkers, db)
+	wp.Start()
+	log.Printf("✅ Worker pool started: %d API workers, %d processing workers, rate limit: %d/sec",
+		apiWorkers, procWorkers, apiRateLimit)
+
+	defer func() {
+		log.Println("🛑 Shutting down worker pool...")
+		if err := wp.Shutdown(10 * time.Second); err != nil {
+			log.Printf("⚠️  Worker pool shutdown error: %v", err)
+		}
+	}()
 
 	// ============================================================
 	// INITIALIZE BUSINESS LOGIC SERVICE
 	// ============================================================
-	brandScanService := service.NewBrandScanService()
-	// TODO: Add your dependencies to brandScanService
-	// brandScanService := service.NewBrandScanService(mongoRepo, scannerAPI)
+	brandScanService := service.NewBrandScanService(wp)
 
 	// ============================================================
 	// INITIALIZE EVENT CONSUMER
@@ -69,30 +99,14 @@ func main() {
 	// ============================================================
 	// START EVENT CONSUMER
 	// ============================================================
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	consumerCtx, consumerCancel := context.WithCancel(context.Background())
+	defer consumerCancel()
 
 	go func() {
 		log.Println("👂 Starting event consumer...")
-		if err := eventConsumer.Start(ctx); err != nil && err != context.Canceled {
+		if err := eventConsumer.Start(consumerCtx); err != nil && err != context.Canceled {
 			log.Printf("⚠️  Event consumer stopped: %v", err)
 		}
-	}()
-
-	// ============================================================
-	// START HTTP SERVER (Optional - for health checks, etc.)
-	// ============================================================
-	router := apiHandler.NewRouter()
-	server := &http.Server{
-	    Addr:    ":8081",
-	    Handler: router,
-	}
-	
-	go func() {
-	    log.Println("🌐 HTTP server starting on :8081")
-	    if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-	        log.Fatalf("❌ HTTP server failed: %v", err)
-	    }
 	}()
 
 	// ============================================================
@@ -102,24 +116,16 @@ func main() {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
 	log.Println("✅ Data Service started successfully")
-	log.Println("🔄 Waiting for events... (Press Ctrl+C to shutdown)")
+	log.Println("🔄 Listening for events... (Press Ctrl+C to shutdown)")
 
 	// Block until signal received
 	<-sigCh
 	log.Println("\n🛑 Shutdown signal received, initiating graceful shutdown...")
 
-	// Cancel context to stop consumer
-	cancel()
+	// Cancel consumer context
+	consumerCancel()
 
-	// Shutdown timeout
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
-
-	if err := server.Shutdown(shutdownCtx); err != nil {
-	    log.Printf("⚠️  HTTP server shutdown error: %v", err)
-	}
-
-	// Give consumer time to finish processing in-flight messages
+	// Wait a bit for in-flight messages
 	time.Sleep(2 * time.Second)
 
 	log.Println("👋 Data Service stopped gracefully")

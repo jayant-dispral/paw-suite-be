@@ -10,7 +10,7 @@ import (
 
 // Task represents work to be done by API workers
 type Task struct {
-	ID          string // Format: {projectID}_{timestamp}
+	ID          string // Format: {projectID}_{Timestamp}
 	ProjectID   primitive.ObjectID
 	Keywords    []string
 	RequestedBy string
@@ -24,14 +24,14 @@ func NewTask(event domain.BrandMonitorEvent) (Task, error) {
 		return Task{}, fmt.Errorf("invalid project ID: %w", err)
 	}
 
-	taskID := fmt.Sprintf("%s_%d", event.ProjectID, event.TimeStamp.Unix())
+	taskID := fmt.Sprintf("%s_%d", event.ProjectID, event.Timestamp.Unix())
 
 	return Task{
 		ID:          taskID,
 		ProjectID:   projectID,
 		Keywords:    event.KeyWords,
 		RequestedBy: event.RequestedBy,
-		Timestamp:   event.TimeStamp,
+		Timestamp:   event.Timestamp,
 	}, nil
 }
 

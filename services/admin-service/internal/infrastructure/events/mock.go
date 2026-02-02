@@ -78,10 +78,10 @@ func (g *MockEventGenerator) generateAndPublish(ctx context.Context) {
 func (g *MockEventGenerator) createMockEvent() *domain.BrandMonitorEvent {
 	// Mock data pools
 	projects := []string{
-		"proj-ecommerce-001",
-		"proj-saas-platform-002",
-		"proj-fintech-app-003",
-		"proj-healthcare-portal-004",
+		"507f1f77bcf86cd799439011",  // Valid 24-char hex ObjectID
+		"507f191e810c19729de860ea",
+		"507f191e810c19729de860eb",
+		"507f191e810c19729de860ec",
 	}
 
 	keywords := []string{
@@ -102,10 +102,32 @@ func (g *MockEventGenerator) createMockEvent() *domain.BrandMonitorEvent {
 		"user-diana-321",
 	}
 
+	keyWordsSize := 1 + rand.Intn(3)
+	randomKeyWords := getRandomKeywords(keywords, keyWordsSize)
+
 	return &domain.BrandMonitorEvent{
 		ProjectID:   projects[rand.Intn(len(projects))],
-		KeyWords:     keywords[0:rand.Intn(len(keywords))],
+		KeyWords:    randomKeyWords,
 		RequestedBy: users[rand.Intn(len(users))],
-		TimeStamp:   time.Now(),
+		Timestamp:   time.Now(),
 	}
+}
+
+func getRandomKeywords(keywords []string, count int) []string {
+    if count <= 0 || len(keywords) == 0 {
+        return []string{}
+    }
+    
+    // Limit count to keywords length
+    if count > len(keywords) {
+        count = len(keywords)
+    }
+    
+    randomKeywords := make([]string, 0, count) // Pre-allocate capacity
+    
+    for i := 0; i < count; i++ {
+        randomKeywords = append(randomKeywords, keywords[rand.Intn(len(keywords))])
+    }
+    
+    return randomKeywords
 }

@@ -70,25 +70,34 @@ func NewRabbitMQEventConsumer(cfg Config, handler ports.BrandMonitorEventHandler
 
 // handleMessage is the internal handler that unmarshals messages and delegates to business logic
 func (c *RabbitMQEventConsumer) handleMessage(ctx context.Context, body []byte) error {
-	// Unmarshal the event
 	var event domain.BrandMonitorEvent
 	if err := rabbitmq.UnmarshalMessage(body, &event); err != nil {
-		// Don't requeue malformed messages - they'll fail forever
 		log.Printf("[EventConsumer] ERROR: Failed to unmarshal message (discarding): %v", err)
+		log.Printf("[EventConsumer] Bad message body: %s", string(body))
 		return nil // ACK to remove bad message
 	}
 
-	log.Printf("[EventConsumer] 📨 Received BrandMonitorEvent: Project=%s, Keyword=%s, RequestedBy=%s",
+	log.Printf("[EventConsumer] 📨 Received BrandMonitorEvent: Project=%s, Keywords=%v, RequestedBy=%s",
 		event.ProjectID, event.KeyWords, event.RequestedBy)
+
+	// Validate BEFORE calling handler (prevents poison loop)
+	if event.ProjectID == "" {
+		log.Printf("[EventConsumer] ⚠️  Invalid event: missing project_id (discarding)")
+		return nil // ACK
+	}
+	
+	if len(event.KeyWords) == 0 {
+		log.Printf("[EventConsumer] ⚠️  Invalid event: no keywords (discarding)")
+		return nil // ACK
+	}
 
 	// Delegate to business logic handler
 	if err := c.handler.HandleBrandMonitorEvent(ctx, &event); err != nil {
-		// Business logic failed - NACK and requeue for retry
 		log.Printf("[EventConsumer] ❌ Handler failed (will requeue): %v", err)
 		return err // NACK
 	}
 
-	log.Printf("[EventConsumer] ✓ Successfully processed event: Project=%s, Keyword=%s",
+	log.Printf("[EventConsumer] ✓ Successfully processed event: Project=%s, Keywords=%v",
 		event.ProjectID, event.KeyWords)
 
 	return nil // ACK
