@@ -37,7 +37,7 @@ func NewBrandScanService() *BrandScanService {
 // HandleBrandMonitorEvent processes incoming brand monitor events
 func (s *BrandScanService) HandleBrandMonitorEvent(ctx context.Context, event *domain.BrandMonitorEvent) error {
 	log.Printf("[BrandScanService] 🔍 Starting brand scan for keyword: %s (project: %s)",
-		event.KeyWord, event.ProjectID)
+		event.KeyWords, event.ProjectID)
 
 	// ============================================================
 	// YOUR BUSINESS LOGIC GOES HERE
@@ -50,8 +50,8 @@ func (s *BrandScanService) HandleBrandMonitorEvent(ctx context.Context, event *d
 	}
 
 	// 2. Simulate scanning the internet for brand mentions
-	log.Printf("[BrandScanService] 🌐 Scanning internet for mentions of '%s'...", event.KeyWord)
-	scanResults := s.performBrandScan(ctx, event.KeyWord)
+	log.Printf("[BrandScanService] 🌐 Scanning internet for mentions of '%s'...", event.KeyWords)
+	scanResults := s.performBrandScan(ctx, event.KeyWords[0])
 
 	// 3. Save results to database
 	log.Printf("[BrandScanService] 💾 Saving %d scan results to database...", len(scanResults))
@@ -66,7 +66,7 @@ func (s *BrandScanService) HandleBrandMonitorEvent(ctx context.Context, event *d
 		// TODO: Trigger alert notifications
 	}
 
-	log.Printf("[BrandScanService] ✅ Brand scan completed successfully for '%s'", event.KeyWord)
+	log.Printf("[BrandScanService] ✅ Brand scan completed successfully for '%s'", event.KeyWords[0])
 	return nil
 }
 
@@ -75,7 +75,7 @@ func (s *BrandScanService) validateEvent(event *domain.BrandMonitorEvent) error 
 	if event.ProjectID == "" {
 		return fmt.Errorf("project_id is required")
 	}
-	if event.KeyWord == "" {
+	if event.KeyWords[0] == "" {
 		return fmt.Errorf("keyword is required")
 	}
 	return nil
