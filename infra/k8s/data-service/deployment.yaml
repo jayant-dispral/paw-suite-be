@@ -21,8 +21,8 @@ spec:
         - containerPort: 8081
           name: http
         env:
-        # Existing environment variables
-        - name: MONGO_URI
+        # MongoDB Configuration
+        - name: MONGODB_URI
           value: "mongodb://mongo:27017"
         
         # RabbitMQ Configuration
@@ -39,16 +39,37 @@ spec:
             memory: 128Mi
           limits:
             cpu: 500m
-            memory: 256Mi
+            memory: 512Mi  # Increased for worker pool
         
-        livenessProbe:
-          tcpSocket:
-            port: 8081
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        
-        readinessProbe:
-          tcpSocket:
+        # Startup probe - gives app time to initialize worker pool
+        startupProbe:
+          httpGet:
+            path: /health
             port: 8081
           initialDelaySeconds: 5
-          periodSeconds: 5
+          periodSeconds: 3
+          failureThreshold: 10  # 30 seconds total (3s * 10)
+        
+        # Liveness probe - checks if process is alive
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 30       # Check every 30 seconds
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3     # Restart after 3 failures (90s)
+        
+        # Readiness probe - checks if ready to handle traffic
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8081
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10       # Check every 10 seconds
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3     # Remove from service after 3 failures (30s)

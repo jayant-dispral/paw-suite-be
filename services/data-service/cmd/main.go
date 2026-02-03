@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,6 +13,7 @@ import (
 	"github.com/jayant-dispral/brand-threat-be/services/data-service/infrastrucutre/events"
 	"github.com/jayant-dispral/brand-threat-be/services/data-service/internal/service"
 	"github.com/jayant-dispral/brand-threat-be/services/data-service/internal/service/workerpool"
+	apiHandler "github.com/jayant-dispral/brand-threat-be/services/data-service/internal/adapters/handler/http"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -93,6 +95,33 @@ func main() {
 		log.Println("📥 Closing event consumer...")
 		if err := eventConsumer.Close(); err != nil {
 			log.Printf("⚠️  Error closing event consumer: %v", err)
+		}
+	}()
+
+
+	// ===========================================================
+	// HTTP SERVER
+	// ===========================================================
+	router := apiHandler.NewRouter()
+	httpServer := http.Server{
+		Addr: ":8081",
+		Handler: router,
+
+	}
+	router.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
+		if !wp.IsHealthy() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("Worker pool not ready\n"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Ready\n"))
+	})
+
+	go func() {
+		log.Println("🌐 HTTP server starting on :8081")
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("⚠️  HTTP server error: %v", err)
 		}
 	}()
 

@@ -2,12 +2,12 @@
 package workerpool
 
 import (
-    "context"
-    "fmt"
-    "time"
-    
-    "golang.org/x/time/rate"
-    "go.mongodb.org/mongo-driver/mongo"
+	"context"
+	"fmt"
+	"time"
+
+	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/time/rate"
 )
 
 type WorkerPool struct {
@@ -225,4 +225,13 @@ func (wp *WorkerPool) Shutdown(timeout time.Duration) error {
     
     fmt.Println("Shutdown complete")
     return nil
+}
+
+func (wp *WorkerPool) IsHealthy() bool {
+    select {
+    case <- wp.ctx.Done():
+        return  false
+    default:
+        return  true
+    }
 }
