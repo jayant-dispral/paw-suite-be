@@ -1,9 +1,11 @@
 package http
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/jayant-dispral/brand-threat-be/shared/domain"
+	pkgerrors "github.com/jayant-dispral/brand-threat-be/shared/pkg/errors"
 	"github.com/jayant-dispral/brand-threat-be/shared/pkg/http/utils"
 	"github.com/jayant-dispral/brand-threat-be/shared/pkg/response"
 	"github.com/jayant-dispral/brand-threat-be/shared/ports"
@@ -70,4 +72,32 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, user)
+}
+
+func (h *UserHandler) SearchByEmail(w http.ResponseWriter, r *http.Request) {
+	email := r.URL.Query().Get("email")
+	if email == "" {
+		response.WithError(w, pkgerrors.NewError(domain.ErrInvalidInput, fmt.Errorf("email query parameter is required")))
+		return
+	}
+
+	user, err := h.service.GetUserByEmail(r.Context(), email)
+	if err != nil {
+		response.WithError(w, err)
+		return
+	}
+
+	type userSearchResult struct {
+		ID       string `json:"id"`
+		Email    string `json:"email"`
+		FullName string `json:"full_name"`
+	}
+
+	result := userSearchResult{
+		ID:       user.ID.Hex(),
+		Email:    user.Email,
+		FullName: user.FullName,
+	}
+
+	response.JSONWithMessage(w, http.StatusOK, "User found", result)
 }

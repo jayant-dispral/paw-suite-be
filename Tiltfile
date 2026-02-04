@@ -4,7 +4,7 @@ k8s_context('kind-paw-suite')
 
 # build the admin -service image
 docker_build(
-    'admin-servive:dev',
+    'admin-service:dev',
     '.',
     dockerfile='services/admin-service/Dockerfile'
 )

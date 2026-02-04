@@ -27,9 +27,12 @@ func NewProjectService(projectRepo ports.ProjectRepository, userRepo ports.UserR
 func (s *ProjectService) GetProjectsByUserId(ctx context.Context, ownerId primitive.ObjectID) ([]domain.Project, error) {
 	projects, err := s.projectRepo.FindByOwnerID(ctx, ownerId)
 	if err != nil {
-
+		return nil, err
 	}
-	return projects, err
+	for i := range projects {
+		s.hydrateTeamMemberEmails(ctx, projects[i].TeamMembers)
+	}
+	return projects, nil
 }
 
 // CreateProject validated subscription limits and creates a new project
@@ -106,6 +109,7 @@ func (s *ProjectService) GetProjectDetails(ctx context.Context, projectIDStr, us
 		return nil, pkgerrors.NewError(domain.ErrForbidden, fmt.Errorf("access denied: you must be the project owner or a team member to view this project"))
 	}
 
+	s.hydrateTeamMemberEmails(ctx, project.TeamMembers)
 	return project, nil
 }
 
@@ -166,6 +170,7 @@ func (s *ProjectService) UpdateProjectDetails(ctx context.Context, projectIDStr,
 		return nil, fmt.Errorf("failed to update project: %w", err)
 	}
 
+	s.hydrateTeamMemberEmails(ctx, project.TeamMembers)
 	return project, nil
 }
 
@@ -345,7 +350,7 @@ func (s *ProjectService) AddTeamMember(ctx context.Context, projectIDStr, userID
 	// Check if user is already a member
 	inviteeUser, err := s.userRepo.GetUserByEmail(ctx, req.UserEmail)
 	if err != nil {
-		return  pkgerrors.NewError(domain.ErrNotFound, fmt.Errorf("user with email %s not found", req.UserEmail))
+		return pkgerrors.NewError(domain.ErrNotFound, fmt.Errorf("user with email %s not found", req.UserEmail))
 	}
 
 	for _, tm := range project.TeamMembers {
@@ -361,6 +366,7 @@ func (s *ProjectService) AddTeamMember(ctx context.Context, projectIDStr, userID
 	}
 	newMember := domain.TeamMember{
 		UserID:  inviteeUser.ID,
+		Email:   inviteeUser.Email,
 		Role:    req.Role,
 		AddedAt: time.Now(),
 		AddedBy: addedBy,
@@ -518,5 +524,19 @@ func (s *ProjectService) GetTeamMembers(ctx context.Context, projectIDStr, userI
 		}
 	}
 
+	s.hydrateTeamMemberEmails(ctx, project.TeamMembers)
 	return project.TeamMembers, nil
+}
+
+func (s *ProjectService) hydrateTeamMemberEmails(ctx context.Context, members []domain.TeamMember) {
+	for i := range members {
+		if members[i].Email != "" {
+			continue
+		}
+		user, err := s.userRepo.GetUserById(ctx, members[i].UserID.Hex())
+		if err != nil {
+			continue
+		}
+		members[i].Email = user.Email
+	}
 }

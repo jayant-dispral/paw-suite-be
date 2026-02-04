@@ -77,6 +77,7 @@ func userRoutes(h *UserHandler, AuthSVC *ports.AuthService) http.Handler {
 
 	//auth middleware
 	r.Use(AuthMiddleware(*AuthSVC))
+	r.Get("/search", h.SearchByEmail)
 	r.Get("/me", h.GetMe)
 	r.Post("/me", h.UpdateUser)
 	return r
