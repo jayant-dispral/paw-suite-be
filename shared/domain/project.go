@@ -32,6 +32,8 @@ type Project struct {
 	//Monitoring configuration
 	MonitoringConfig MonitoringConfig `bson:"monitoring_config" json:"monitoring_config" validate:"required"`
 	AlertConfig      AlertConfig      `bson:"alert_config" json:"alert_config" validate:"required"`
+	NextScanAt       time.Time        `bson:"next_scan_at" json:"next_scan_at"`
+	LastScanAt       *time.Time       `bson:"last_scan_at,omitempty" json:"last_scan_at,omitempty"`
 
 	//Team Management
 	TeamMembers []TeamMember `bson:"team_members" json:"team_members" validate:"dive"`
@@ -95,7 +97,7 @@ type TeamMember struct {
 // 1. {"owner_id": 1, "status": 1, "created_at": -1}
 // 2. {"team_members.user_id": 1} - for finding projects where user is a member
 // 3. {"status": 1, "monitoring_config.platforms": 1} - for active monitoring queries
-
+// 4. { status: 1, next_scan_at: 1 }
 type CreateProjectRequest struct {
 	Name             string           `json:"name" validate:"required,min=1,max=100"`
 	Description      string           `json:"description"`
@@ -122,7 +124,7 @@ type UpdateProjectStatusRequest struct {
 
 type AddTeamMemberRequest struct {
 	UserEmail string         `json:"user_email" validate:"required"`
-	Role   TeamMemberRole `json:"role" validate:"required,oneof=admin editor viewer"`
+	Role      TeamMemberRole `json:"role" validate:"required,oneof=admin editor viewer"`
 }
 
 type UpdateTeamMemberRoleRequest struct {
