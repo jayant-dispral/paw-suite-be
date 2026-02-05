@@ -1,80 +1,135 @@
 package workerpool
 
 import (
+	"encoding/json"
 	"fmt"
-	"math/rand"
+	"net/http"
+	"net/url"
+	"os"
+	"strings"
 	"time"
 
-
+	scraper "github.com/jayant-dispral/brand-threat-be/services/data-service/pkg/scrapper"
 	"github.com/jayant-dispral/brand-threat-be/shared/domain"
 )
 
 func (wp *WorkerPool) callScrapingAPI(task Task) (Result, error) {
-    // Simulate API latency (2-6 seconds)
-    latency := time.Duration(2000+rand.Intn(4000)) * time.Millisecond
-    time.Sleep(latency)
-    
-    // Simulate occasional errors (5% failure rate)
-    if rand.Float32() < 0.05 {
-        return Result{}, fmt.Errorf("API error: rate limited (429)")
-    }
-    
-    // Generate mock social posts (10-20 posts)
-    numPosts := 10 + rand.Intn(11)
-    posts := make([]domain.SocialPost, numPosts)
-    
-    now := time.Now()
-    fetchedAt := now
-    
-    for i := 0; i < numPosts; i++ {
-        externalID := fmt.Sprintf("twitter:%d%d", now.Unix(), rand.Intn(1000000))
-        
-        posts[i] = domain.SocialPost{
-            ProjectID:  task.ProjectID,
-            Platform:   "twitter",
-            ExternalID: externalID,
-            Content:    fmt.Sprintf("Mock tweet about %v - #%d", task.Keywords, i+1),
-            URL:        fmt.Sprintf("https://twitter.com/user/status/%s", externalID),
-            PostedAt:   now.Add(-time.Duration(rand.Intn(3600)) * time.Second),
-            
-            Author: domain.Author{
-                ID:        fmt.Sprintf("user_%d", rand.Intn(1000000)),
-                Username:  fmt.Sprintf("user_%d", rand.Intn(10000)),
-                Name:      fmt.Sprintf("Mock User %d", i+1),
-                Verified:  rand.Float32() < 0.1, // 10% verified
-                Followers: rand.Intn(10000),
-            },
-            
-            Engagement: domain.Engagement{
-                Likes:    rand.Intn(500),
-                Shares:   rand.Intn(100),
-                Comments: rand.Intn(50),
-                Views:    rand.Intn(5000),
-            },
-            
-            Sentiment:      domain.SentimentNeutral,
-            SentimentScore: -1.0, // Not calculated yet
-            
-            Entities: domain.Entities{
-                Hashtags: task.Keywords,
-                URLs:     []string{},
-                Mentions: []string{},
-            },
-            
-            MatchedKeywords: task.Keywords,
-            IsViral:         false,
-            
-            FetchedAt:  fetchedAt,
-            IngestedAt: now,
-            ExpiresAt:  now.AddDate(0, 0, 7), // 7 days retention
-            CreatedAt:  now,
-            UpdatedAt:  now,
-        }
-    }
-    
-    return Result{
-        TaskID:      task.ID,
-        SocialPosts: posts,
-        FetchedAt:   fetchedAt,
-    }, nil
+	query := strings.Join(task.Keywords, " OR ")
+
+	url := fmt.Sprintf(
+		"https://twitter241.p.rapidapi.com/search-v3?type=Top&count=30&query=%s",
+		url.QueryEscape(query),
+	)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return Result{}, err
+	}
+
+	req.Header.Set("x-rapidapi-key", os.Getenv("RAPIDAPI_KEY"))
+	req.Header.Set("x-rapidapi-host", "twitter241.p.rapidapi.com")
+
+	start := time.Now()
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return Result{}, err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return Result{}, fmt.Errorf("twitter api error: %s", resp.Status)
+	}
+
+	var parsed scraper.TwitterSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return Result{}, err
+	}
+
+	now := time.Now()
+
+	posts := make([]domain.SocialPost, 0, 30)
+
+	for _, instr := range parsed.Result.TimelineResponse.Timeline.Instructions {
+		for _, entry := range instr.Entries {
+			if !strings.HasPrefix(entry.EntryID, "tweet-") {
+				continue
+			}
+
+			tweet := entry.Content.Content.TweetResults.Result
+			// Critical field checks
+			if tweet.RestID == "" ||
+				tweet.Core.UserResults.Result.RestID == "" {
+				continue
+			}
+
+			text := tweet.Legacy.FullText
+			var hashtags []string
+			var urls []string
+
+			if tweet.NoteTweet != nil {
+				text = tweet.NoteTweet.NoteTweetResults.Result.Text
+
+				for _, h := range tweet.NoteTweet.NoteTweetResults.Result.EntitySet.Hashtags {
+					hashtags = append(hashtags, h.Text)
+				}
+
+				for _, u := range tweet.NoteTweet.NoteTweetResults.Result.EntitySet.Urls {
+					urls = append(urls, u.ExpandedURL)
+				}
+			}
+
+			author := tweet.Core.UserResults.Result
+
+			post := domain.SocialPost{
+				ProjectID:  task.ProjectID,
+				Platform:   "twitter",
+				ExternalID: "twitter:" + tweet.RestID,
+				Content:    text,
+				URL: fmt.Sprintf(
+					"https://twitter.com/%s/status/%s",
+					author.Legacy.ScreenName,
+					tweet.RestID,
+				),
+				PostedAt: time.UnixMilli(tweet.Legacy.CreatedAtMs),
+
+				Author: domain.Author{
+					ID:        author.RestID,
+					Username:  author.Legacy.ScreenName,
+					Name:      author.Legacy.Name,
+					Verified:  author.Legacy.Verified,
+					Followers: author.Legacy.Followers,
+				},
+
+				Engagement: domain.Engagement{
+					Likes:    tweet.Legacy.Counts.FavoriteCount,
+					Shares:   tweet.Legacy.Counts.RetweetCount,
+					Comments: tweet.Legacy.Counts.ReplyCount,
+				},
+
+				Sentiment:      domain.SentimentNeutral,
+				SentimentScore: -1,
+				Entities: domain.Entities{
+					Hashtags: hashtags,
+					URLs:     urls,
+				},
+				MatchedKeywords: task.Keywords,
+
+				FetchedAt:  start,
+				IngestedAt: now,
+				ExpiresAt:  now.AddDate(0, 0, 7),
+				CreatedAt:  now,
+				UpdatedAt:  now,
+			}
+			posts = append(posts, post)
+		}
+	}
+
+	return Result{
+		TaskID:      task.ID,
+		SocialPosts: posts,
+		FetchedAt:   start,
+	}, nil
+
 }

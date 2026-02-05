@@ -34,42 +34,33 @@ func (s *BrandScanService) HandleBrandMonitorEvent(ctx context.Context, event *d
 		return nil // ACK invalid events (don't requeue)
 	}
 
-	//create one task per keyword
-	tasksSubmitted := 0
-	for _, keyword := range event.KeyWords {
-		task, err := s.createTask(event, keyword)
-		if err != nil {
-			log.Printf("[BrandScanService] ⚠️  Failed to create task for keyword '%s': %v", keyword, err)
-			continue
-		}
-
-		//submit to worker pool
-		if err := s.workerPool.SubmitTask(task); err != nil {
-			log.Printf("[BrandScanService] ⚠️  Failed to submit task for keyword '%s': %v", keyword, err)
-			// Don't fail entire event - continue with other keywords
-			continue
-		}
-		tasksSubmitted++
-
-		if tasksSubmitted == 0 {
-			return fmt.Errorf("failed to submit any tasks")
-		}
-
-		log.Printf("[BrandScanService] ✓ Submitted task for keyword '%s' (task ID: %s)", keyword, task.ID)
+	task, err := s.createTask(event, event.KeyWords)
+	if err != nil {
+		log.Printf("[BrandScanService] ⚠️  Failed to create task for keyword '%v': %v", event.KeyWords, err)
+		return fmt.Errorf("Failed to create task: %v", err)
 	}
-	return  nil
+
+	//submit to worker pool
+	if err := s.workerPool.SubmitTask(task); err != nil {
+		log.Printf("[BrandScanService] ⚠️  Failed to submit task for keyword '%v': %v", event.KeyWords, err)
+		return fmt.Errorf("Failed to submit task: %v", err)
+	}
+
+	log.Printf("[BrandScanService] ✓ Submitted task for keywords '%v' (task ID: %s)", event.KeyWords, task.ID)
+
+	return nil
 }
 
-func (s *BrandScanService) createTask(event *domain.BrandMonitorEvent, keyword string) (workerpool.Task, error) {
+func (s *BrandScanService) createTask(event *domain.BrandMonitorEvent, keywords []string) (workerpool.Task, error) {
 	projectID, err := primitive.ObjectIDFromHex(event.ProjectID)
 	if err != nil {
 		return workerpool.Task{}, fmt.Errorf("invalid project ID: %w", err)
 	}
 
 	task := workerpool.Task{
-		ID:          fmt.Sprintf("%s_%s_%d", event.ProjectID, keyword, event.Timestamp.Unix()),
+		ID:          fmt.Sprintf("%s_%s_%d", event.ProjectID, keywords, event.Timestamp.Unix()),
 		ProjectID:   projectID,
-		Keywords:    []string{keyword}, // One keyword per task
+		Keywords:    keywords,
 		RequestedBy: event.RequestedBy,
 		Timestamp:   event.Timestamp,
 	}
