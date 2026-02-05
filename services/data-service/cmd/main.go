@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/jayant-dispral/brand-threat-be/services/data-service/infrastrucutre/events"
+	apiHandler "github.com/jayant-dispral/brand-threat-be/services/data-service/internal/adapters/handler/http"
 	"github.com/jayant-dispral/brand-threat-be/services/data-service/internal/service"
 	"github.com/jayant-dispral/brand-threat-be/services/data-service/internal/service/workerpool"
-	apiHandler "github.com/jayant-dispral/brand-threat-be/services/data-service/internal/adapters/handler/http"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -31,9 +31,9 @@ func main() {
 	routingKeys := []string{"brand.#"}
 
 	// Worker pool configuration
-	apiRateLimit := 10  // requests per second to external API
-	apiWorkers := 40    // concurrent API workers (adjust based on API latency)
-	procWorkers := 5    // concurrent processing workers
+	apiRateLimit := 10 // requests per second to external API
+	apiWorkers := 40   // concurrent API workers (adjust based on API latency)
+	procWorkers := 5   // concurrent processing workers
 
 	// ============================================================
 	// CONNECT TO MONGODB
@@ -56,7 +56,7 @@ func main() {
 		log.Fatalf("❌ Failed to ping MongoDB: %v", err)
 	}
 
-	db := mongoClient.Database("brand_monitoring") // Change to your DB name
+	db := mongoClient.Database("brand_threat")
 	log.Println("✅ Connected to MongoDB")
 
 	// ============================================================
@@ -98,15 +98,13 @@ func main() {
 		}
 	}()
 
-
 	// ===========================================================
 	// HTTP SERVER
 	// ===========================================================
 	router := apiHandler.NewRouter()
 	httpServer := http.Server{
-		Addr: ":8081",
+		Addr:    ":8081",
 		Handler: router,
-
 	}
 	router.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
 		if !wp.IsHealthy() {
