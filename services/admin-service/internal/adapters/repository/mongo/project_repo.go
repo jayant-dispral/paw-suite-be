@@ -33,6 +33,7 @@ func NewProjectRepository(db *mongo.Database) ports.ProjectRepository {
 				{Key: "owner_id", Value: 1},
 				{Key: "status", Value: 1},
 				{Key: "created_at", Value: -1},
+				{Key: "next_scan_at", Value: 1},
 			},
 		})
 		if err != nil {

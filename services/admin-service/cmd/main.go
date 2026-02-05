@@ -37,9 +37,8 @@ func main() {
 
 	db := dbClient.Database(cfg.MongoDBDatabaseName)
 
-
 	//====================================================
-	// 		RabbitMQ 
+	// 		RabbitMQ
 	//====================================================
 	rabbitmqURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 	exchangeName := getEnv("RABBITMQ_EXCHANGE", "brand_events")
@@ -94,11 +93,9 @@ func main() {
 	// Main.go no longer knows about "/auth/login". It just asks for a Router.
 	r := apiHandler.NewRouter(authHandler, userHandler, projectHandler)
 
-
 	//mock event generate
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	
 
 	// 5. Start Server
 	srv := &http.Server{
@@ -142,12 +139,11 @@ func main() {
 	}
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-	    log.Printf("⚠️  HTTP server shutdown error: %v", err)
+		log.Printf("⚠️  HTTP server shutdown error: %v", err)
 	}
 
 	log.Println("👋 Admin Service stopped gracefully")
 }
-
 
 func getEnv(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
