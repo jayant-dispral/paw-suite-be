@@ -88,6 +88,7 @@ const (
 
 type TeamMember struct {
 	UserID  primitive.ObjectID `bson:"user_id" json:"user_id" validate:"required"`
+	Email   string             `bson:"email,omitempty" json:"email"`
 	Role    TeamMemberRole     `bson:"role" json:"role" validate:"required,oneof=admin editor viewer"`
 	AddedAt time.Time          `bson:"added_at" json:"added_at"`
 	AddedBy primitive.ObjectID `bson:"added_by" json:"added_by"`
@@ -123,7 +124,7 @@ type UpdateProjectStatusRequest struct {
 }
 
 type AddTeamMemberRequest struct {
-	UserEmail string         `json:"user_email" validate:"required"`
+	UserEmail string         `json:"user_email" validate:"required,email"`
 	Role      TeamMemberRole `json:"role" validate:"required,oneof=admin editor viewer"`
 }
 
