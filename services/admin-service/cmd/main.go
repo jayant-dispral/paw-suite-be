@@ -19,33 +19,51 @@ import (
 )
 
 func main() {
-	log.Printf("Starting app")
-	// 1. Load Configuration
+	log.Println("🚀 Starting admin-service")
+
+	// ------------------------------------------------
+	// 1. Root context (controls EVERYTHING)
+	// ------------------------------------------------
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// ------------------------------------------------
+	// 2. OS signal handling (Kubernetes / Ctrl+C safe)
+	// ------------------------------------------------
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+		sig := <-sigCh
+		log.Printf("🛑 Received signal: %v", sig)
+		cancel()
+	}()
+
+	// ------------------------------------------------
+	// 3. Load configuration
+	// ------------------------------------------------
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Fatalf("❌ Failed to load config: %v", err)
 	}
-	log.Printf("Loaded config: %+v", cfg)
+	log.Printf("✅ Config loaded")
 
-	// 2. Database Connection
-	log.Printf("MongoDB URI: %s", cfg.MongoDBDatabaseURI)
+	// ------------------------------------------------
+	// 4. MongoDB
+	// ------------------------------------------------
 	dbClient, err := mongo.NewConnection(cfg.MongoDBDatabaseURI)
 	if err != nil {
-		log.Fatalf("Failed to connect to MongoDB: %v", err)
+		log.Fatalf("❌ Failed to connect to MongoDB: %v", err)
 	}
 	defer dbClient.Disconnect(context.Background())
 
 	db := dbClient.Database(cfg.MongoDBDatabaseName)
 
-	//====================================================
-	// 		RabbitMQ
-	//====================================================
+	// ------------------------------------------------
+	// 5. RabbitMQ publisher
+	// ------------------------------------------------
 	rabbitmqURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 	exchangeName := getEnv("RABBITMQ_EXCHANGE", "brand_events")
-	mockEventsEnabled := getEnv("MOCK_EVENTS_ENABLED", "true") == "true"
-	mockEventInterval := getEnvDuration("MOCK_EVENT_INTERVAL", 5*time.Second)
 
-	//Initilise event publisher
 	eventPublisher, err := events.NewRabbitMQEventPublisher(events.Config{
 		RabbitMQURL:  rabbitmqURL,
 		ExchangeName: exchangeName,
@@ -54,29 +72,13 @@ func main() {
 		log.Fatalf("❌ Failed to initialize event publisher: %v", err)
 	}
 	defer func() {
-		log.Println("📤 Closing event publisher...")
-		if err := eventPublisher.Close(); err != nil {
-			log.Printf("⚠️  Error closing event publisher: %v", err)
-		}
+		log.Println("📤 Closing event publisher")
+		_ = eventPublisher.Close()
 	}()
 
-	//start mock event generator
-	var mockGenerator *events.MockEventGenerator
-	if mockEventsEnabled {
-		log.Printf("🧪 Mock event generator enabled (interval: %v)", mockEventInterval)
-		mockGenerator = events.NewMockEventGenerator(eventPublisher, mockEventInterval)
-
-		// Start generator in background
-		go func() {
-			if err := mockGenerator.Start(context.Background()); err != nil {
-				log.Printf("⚠️  Mock event generator stopped: %v", err)
-			}
-		}()
-
-		defer mockGenerator.Stop()
-	}
-
-	// 3. Dependency Injection "REPO"
+	// ------------------------------------------------
+	// 6. Repositories + Services
+	// ------------------------------------------------
 	userRepo := mongo.NewUserRepository(db)
 	projectRepo := mongo.NewProjectRepository(db)
 
@@ -84,65 +86,58 @@ func main() {
 	userService := user.NewService(userRepo)
 	projectService := project.NewProjectService(projectRepo, userRepo)
 
-	// Create the Handlers (The Waiter)
+	// ------------------------------------------------
+	// 7. HTTP Handlers + Router
+	// ------------------------------------------------
 	authHandler := apiHandler.NewAuthHandler(authService)
 	userHandler := apiHandler.NewUserHandler(userService)
 	projectHandler := apiHandler.NewProjectHandler(projectService)
 
-	// 4. Setup Router (The Traffic Controller)
-	// Main.go no longer knows about "/auth/login". It just asks for a Router.
-	r := apiHandler.NewRouter(authHandler, userHandler, projectHandler)
+	router := apiHandler.NewRouter(authHandler, userHandler, projectHandler)
 
-	//mock event generate
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
+	// ------------------------------------------------
+	// 8. Scheduler (background worker)
+	// ------------------------------------------------
+	scanner := project.NewBrandEventScanner(
+		projectRepo,
+		eventPublisher,
+		10*time.Second, // scheduler tick
+		20,             // batch size
+	)
 
-	// 5. Start Server
-	srv := &http.Server{
-		Addr:    ":" + cfg.ServerPort,
-		Handler: r,
-		// ReadTimeout: Max time to read the request body.
-		// Protects against "Slowloris" attacks (clients sending 1 byte every 30s)
-		ReadTimeout: 5 * time.Second,
+	go func() {
+		if err := scanner.Start(ctx); err != nil {
+			log.Printf("⚠️ Scheduler stopped: %v", err)
+		}
+	}()
 
-		// WriteTimeout: Max time to write the response.
-		// If your DB takes 20s, this cuts the connection at 10s to free resources.
+	// ------------------------------------------------
+	// 9. HTTP Server
+	// ------------------------------------------------
+	server := &http.Server{
+		Addr:         ":" + cfg.ServerPort,
+		Handler:      router,
+		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
-
-		// IdleTimeout: Max time to keep a Keep-Alive connection open.
-		IdleTimeout: 120 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Printf("🚀 Server starting on port %s", cfg.ServerPort)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Server failed: %v", err)
+	// Shutdown HTTP server when context is cancelled
+	go func() {
+		<-ctx.Done()
+		log.Println("🧹 Shutting down HTTP server...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
+
+	log.Printf("🌐 HTTP server listening on :%s", cfg.ServerPort)
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("❌ HTTP server failed: %v", err)
 	}
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-
-	log.Println("✅ Admin Service started successfully")
-	log.Println("🔄 Press Ctrl+C to shutdown...")
-
-	// Block until signal received
-	<-sigCh
-	log.Println("\n🛑 Shutdown signal received, initiating graceful shutdown...")
-
-	// Shutdown timeout context
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Stop mock generator (if running)
-	if mockGenerator != nil {
-		log.Println("🧪 Stopping mock event generator...")
-		mockGenerator.Stop()
-	}
-
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("⚠️  HTTP server shutdown error: %v", err)
-	}
-
-	log.Println("👋 Admin Service stopped gracefully")
+	log.Println("👋 Admin service exited cleanly")
 }
 
 func getEnv(key, fallback string) string {
