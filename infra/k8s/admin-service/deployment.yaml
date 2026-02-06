@@ -35,7 +35,7 @@ spec:
         
         # Mock Event Generator (disable in production)
         - name: MOCK_EVENTS_ENABLED
-          value: "true"
+          value: "false"
         - name: MOCK_EVENT_INTERVAL
           value: "5s"
         

@@ -33,6 +33,10 @@ spec:
         - name: RABBITMQ_QUEUE
           value: "data_service_queue"
         
+        # RAPID API
+        - name: RAPIDAPI_KEY
+          value: 60bf9c2e21mshabc4a7ef29e86aep184f34jsnbdc5099ffeb3
+        
         resources:
           requests:
             cpu: 100m
