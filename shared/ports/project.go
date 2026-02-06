@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"github.com/jayant-dispral/brand-threat-be/shared/domain"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -9,11 +10,12 @@ import (
 
 type ProjectRepository interface {
 	Create(ctx context.Context, project *domain.Project) error
-	FindByID(ctx context.Context, id primitive.ObjectID) (*domain.Project, error)
+	FindByID(ctx context.Context, id primitive.ObjectID) (*domain.Project, error)	
 	FindByOwnerID(ctx context.Context, ownerID primitive.ObjectID) ([]domain.Project, error)
 	Update(ctx context.Context, project *domain.Project) error
 	Delete(ctx context.Context, id primitive.ObjectID) error
 	CountByOwnerID(ctx context.Context, ownerID primitive.ObjectID) (int64, error)
+	ClaimDueProjects(ctx context.Context, now time.Time, limit int) ([]domain.Project, error)
 }
 
 type ProjectService interface {
