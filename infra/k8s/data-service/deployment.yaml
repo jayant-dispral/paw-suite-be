@@ -35,7 +35,7 @@ spec:
         
         # RAPID API
         - name: RAPIDAPI_KEY
-          value: 60bf9c2e21mshabc4a7ef29e86aep184f34jsnbdc5099ffeb3
+          value: b2a69bca80mshee0933bc5ea0eecp17dcbajsn4319679bd246
         
         resources:
           requests:

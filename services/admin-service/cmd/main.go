@@ -15,6 +15,7 @@ import (
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/infrastructure/events"
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/auth"
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/project"
+	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/social_post"
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/user"
 )
 
@@ -81,10 +82,12 @@ func main() {
 	// ------------------------------------------------
 	userRepo := mongo.NewUserRepository(db)
 	projectRepo := mongo.NewProjectRepository(db)
+	socialPostRepo := mongo.NewSocialPostRepository(db)
 
 	authService := auth.NewService(userRepo, cfg.JWTSecret)
 	userService := user.NewService(userRepo)
 	projectService := project.NewProjectService(projectRepo, userRepo)
+	socialPostService := social_post.NewSocialPostService(socialPostRepo, projectRepo)
 
 	// ------------------------------------------------
 	// 7. HTTP Handlers + Router
@@ -92,8 +95,9 @@ func main() {
 	authHandler := apiHandler.NewAuthHandler(authService)
 	userHandler := apiHandler.NewUserHandler(userService)
 	projectHandler := apiHandler.NewProjectHandler(projectService)
+	socialPostHandler := apiHandler.NewSocialPostHandler(socialPostService)
 
-	router := apiHandler.NewRouter(authHandler, userHandler, projectHandler)
+	router := apiHandler.NewRouter(authHandler, userHandler, projectHandler, socialPostHandler)
 
 	// ------------------------------------------------
 	// 8. Scheduler (background worker)
