@@ -35,7 +35,9 @@ spec:
         
         # RAPID API
         - name: RAPIDAPI_KEY
-          value: b2a69bca80mshee0933bc5ea0eecp17dcbajsn4319679bd246
+          value: 00e5955c3fmsh6fc57537ab563d5p1ff225jsn880912d74053
+        - name: RAPIDAPI_HOST
+          value: twitter-api45.p.rapidapi.com
         
         resources:
           requests:

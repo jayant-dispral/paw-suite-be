@@ -3,7 +3,7 @@
 # Configuration
 API_URL="http://localhost:8080/api/v1/projects"
 # Note: This token is taken from your prompt. If it expires, update it here.
-AUTH_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjk4OTQ4YjNiY2E2NGQ2NWJmMTJmNWZlIiwiZXhwIjoxNzcwNjkxMTMyLCJpYXQiOjE3NzA2MDQ3MzJ9.LWgbUKiBM-D6CiSdQfyPJCbDB_2mkLdWckI9M9WzQzQ"
+AUTH_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjk4YzE1YWRlMmNhOTk1YmM5ZjRhOTQ2IiwiZXhwIjoxNzcwODc0Njc1LCJpYXQiOjE3NzA3ODgyNzV9.mPYzny76vdx7tOym-iM8ycCw1ZK0-nGaAhHGe1VwBx8"
 
 # Mock Data Arrays
 BRANDS=("Dell" "HP" "Apple" "Razer" "MSI" "Lenovo" "Acer" "Sony" "Samsung" "Logitech")
