@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+  namespace: paw-suite
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Ensures clean state - kills old pod before creating new
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+      - name: rabbitmq
+        image: rabbitmq:3.13.7-management-alpine  # Use alpine for lower resource usage
+        ports:
+        - containerPort: 5672
+          name: amqp
+        - containerPort: 15672
+          name: management
+        env:
+        - name: RABBITMQ_DEFAULT_USER
+          value: "guest"
+        - name: RABBITMQ_DEFAULT_PASS
+          value: "guest"
+        # CRITICAL: Disable peer discovery to prevent cluster confusion from old pod IPs
+        - name: RABBITMQ_CLUSTER_FORMATION_PLACEHOLDER
+          value: "false"
+        
+        # CRITICAL FIX 1: Startup probe with much higher failure threshold
+        # RabbitMQ takes 60-90s to start, especially with feature flags
+        startupProbe:
+          exec:
+            command: ["rabbitmq-diagnostics", "ping"]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 10  # Increased from 5
+          failureThreshold: 12  # 12 * 10s = 2 minutes
+        
+        # CRITICAL FIX 2: Use TCP probes instead of exec for reliability
+        # Exec probes spawn subprocesses which can hang under CPU pressure
+        livenessProbe:
+          tcpSocket:
+            port: 5672  # Check AMQP port directly
+          initialDelaySeconds: 60  # Wait for startup to complete
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          tcpSocket:
+            port: 5672  # AMQP port
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        
+        # CRITICAL FIX 3: Higher resources to prevent throttling
+        resources:
+          requests:
+            cpu: 500m      # Increased from 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m     # Avoid CPU throttling during diagnostics
+            memory: 1Gi
+        
+        # CRITICAL FIX 4: Add proper lifecycle hook for graceful shutdown
+        lifecycle:
+          preStop:
+            exec:
+              command: ["rabbitmqctl", "stop_app"]
+        
+        volumeMounts:
+        - name: rabbitmq-data
+          mountPath: /var/lib/rabbitmq
+      
+      volumes:
+      - name: rabbitmq-data
+        persistentVolumeClaim:
+          claimName: rabbitmq-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbitmq-pvc
+  namespace: paw-suite
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

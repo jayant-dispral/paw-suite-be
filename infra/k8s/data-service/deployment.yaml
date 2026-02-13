@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-service
+  namespace: paw-suite
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-service
+  template:
+    metadata:
+      labels:
+        app: data-service
+    spec:
+      containers:
+      - name: data-service
+        image: data-service:dev
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+          name: http
+        env:
+        # MongoDB Configuration
+        - name: MONGODB_URI
+          value: "mongodb://mongo:27017"
+        
+        # RabbitMQ Configuration
+        - name: RABBITMQ_URL
+          value: "amqp://guest:guest@rabbitmq:5672/"
+        - name: RABBITMQ_EXCHANGE
+          value: "brand_events"
+        - name: RABBITMQ_QUEUE
+          value: "data_service_queue"
+        
+        # RAPID API
+        - name: RAPIDAPI_KEY
+          value: 00e5955c3fmsh6fc57537ab563d5p1ff225jsn880912d74053
+        - name: RAPIDAPI_HOST
+          value: twitter-api45.p.rapidapi.com
+        
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi  # Increased for worker pool
+        
+        # Startup probe - gives app time to initialize worker pool
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 3
+          failureThreshold: 10  # 30 seconds total (3s * 10)
+        
+        # Liveness probe - checks if process is alive
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 30       # Check every 30 seconds
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3     # Restart after 3 failures (90s)
+        
+        # Readiness probe - checks if ready to handle traffic
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8081
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10       # Check every 10 seconds
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3     # Remove from service after 3 failures (30s)

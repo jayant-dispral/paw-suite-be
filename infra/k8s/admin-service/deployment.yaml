@@ -14,17 +14,49 @@ spec:
         app: admin-service
     spec:
       containers:
-        - name: admin-service
-          image: admin-service:dev
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 8080
-          env:
-            - name: SERVER_PORT
-              value: "8080"
-
-            - name: MONGODB_DATABASE_URI
-              value: "mongodb://admin:password@mongo:27017/brand_threat?authSource=admin"
-
-            - name: MONGODB_DATABASE_NAME
-              value: "brand_threat"
+      - name: admin-service
+        image: admin-service:dev
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        # Existing environment variables
+        - name: MONGO_URI
+          value: "mongodb://mongo:27017"
+        - name: JWT_SECRET
+          value: "your-secret-key-change-in-production"
+        
+        # RabbitMQ Configuration
+        - name: RABBITMQ_URL
+          value: "amqp://guest:guest@rabbitmq:5672/"
+        - name: RABBITMQ_EXCHANGE
+          value: "brand_events"
+        
+        # Mock Event Generator (disable in production)
+        - name: MOCK_EVENTS_ENABLED
+          value: "false"
+        - name: MOCK_EVENT_INTERVAL
+          value: "5s"
+        
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5

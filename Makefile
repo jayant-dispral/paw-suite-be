@@ -1,4 +1,4 @@
-.PHONY: run infra-up infra-down test clean run-api run-worker
+.PHONY: run infra-up infra-down test clean run-api run-worker list-files
 
 APP_ENV ?= dev
 DOCKER_COMPOSE_FILE = docker-compose.yml
@@ -49,3 +49,7 @@ fmt:
 
 vet:
 	go vet ./...
+
+# List files in a directory with their content
+list-files:
+	./list-files.sh

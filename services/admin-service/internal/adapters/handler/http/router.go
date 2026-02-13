@@ -11,7 +11,7 @@ import (
 )
 
 // NewRouter initializes the main Chi router and mounts all sub-routers
-func NewRouter(authHandler *AuthHandler, userHandler *UserHandler, projectHanlder *ProjectHandler) *chi.Mux {
+func NewRouter(authHandler *AuthHandler, userHandler *UserHandler, projectHandler *ProjectHandler, socialPostHandler *SocialPostHandler) *chi.Mux {
 	r := chi.NewRouter()
 
 	// 1. Global Middleware (Applied to ALL requests)
@@ -49,7 +49,10 @@ func NewRouter(authHandler *AuthHandler, userHandler *UserHandler, projectHanlde
 
 		r.Mount("/users", userRoutes(userHandler, &authHandler.service))
 
-		r.Mount("/projects", projectRoutes(projectHanlder, &authHandler.service))
+		r.Mount("/projects", projectRoutes(projectHandler, &authHandler.service))
+
+		// Social posts routes - nested under projects
+		r.Mount("/projects/{projectID}/posts", socialPostRoutes(socialPostHandler, &authHandler.service))
 	})
 
 	return r
@@ -101,5 +104,29 @@ func projectRoutes(h *ProjectHandler, AuthSVC *ports.AuthService) http.Handler {
 	r.Put("/{projectID}/team/{userId}", h.UpdateTeamMemberRole)
 	r.Delete("/{projectID}/team/{userId}", h.RemoveTeamMember)
 	r.Get("/{projectID}/team", h.GetTeamMembers)
+	return r
+}
+
+// socialPostRoutes defines the routes for social posts
+func socialPostRoutes(h *SocialPostHandler, AuthSVC *ports.AuthService) http.Handler {
+	r := chi.NewRouter()
+
+	// Auth middleware for all routes
+	r.Use(AuthMiddleware(*AuthSVC))
+
+	// CRUD operations
+	r.Get("/", h.GetPosts)
+	r.Get("/{postID}", h.GetPost)
+
+	// Filtering
+	r.Get("/sentiment/{sentiment}", h.GetPostsBySentiment)
+	r.Get("/viral", h.GetViralPosts)
+	r.Get("/keyword/{keyword}", h.GetPostsByKeyword)
+	r.Get("/stats", h.GetPostStats)
+
+	// Ingestion (for data-service)
+	r.Post("/", h.IngestPost)
+	r.Post("/bulk", h.BulkIngestPosts)
+
 	return r
 }

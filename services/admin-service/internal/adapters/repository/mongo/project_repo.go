@@ -33,6 +33,7 @@ func NewProjectRepository(db *mongo.Database) ports.ProjectRepository {
 				{Key: "owner_id", Value: 1},
 				{Key: "status", Value: 1},
 				{Key: "created_at", Value: -1},
+				{Key: "next_scan_at", Value: 1},
 			},
 		})
 		if err != nil {
@@ -165,4 +166,60 @@ func (r *MongoProjectRepository) Delete(ctx context.Context, id primitive.Object
 	}
 
 	return nil
+}
+
+func (r *MongoProjectRepository) ClaimDueProjects(ctx context.Context, now time.Time, limit int) ([]domain.Project, error) {
+	claimed := make([]domain.Project, 0, limit)
+
+	// Find all due projects first
+	filter := bson.M{
+		"status":       "active",
+		"next_scan_at": bson.M{"$lte": now},
+	}
+
+	opts := options.Find().
+		SetLimit(int64(limit)).
+		SetSort(bson.D{{Key: "next_scan_at", Value: 1}}) // Process most overdue first
+
+	cursor, err := r.coll.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, fmt.Errorf("find due projects failed: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	// Claim each project individually
+	for cursor.Next(ctx) {
+		var project domain.Project
+		if err := cursor.Decode(&project); err != nil {
+			return nil, fmt.Errorf("decode failed: %w", err)
+		}
+
+		// Atomic update with version check to prevent race conditions
+		updateFilter := bson.M{
+			"_id":          project.ID,
+			"next_scan_at": project.NextScanAt, // Ensure it hasn't been updated
+		}
+
+		update := bson.M{
+			"$set": bson.M{
+				"last_scan_at": now,
+				"next_scan_at": now.Add(time.Duration(project.MonitoringConfig.ScanFrequency) * time.Minute),
+			},
+		}
+
+		result, err := r.coll.UpdateOne(ctx, updateFilter, update)
+		if err != nil {
+			return nil, fmt.Errorf("update failed: %w", err)
+		}
+
+		if result.ModifiedCount > 0 {
+			// Update the in-memory project
+			project.LastScanAt = &now
+			project.NextScanAt = now.Add(time.Duration(project.MonitoringConfig.ScanFrequency) * time.Minute)
+			claimed = append(claimed, project)
+		}
+		// If ModifiedCount is 0, another worker claimed it - skip silently
+	}
+
+	return claimed, cursor.Err()
 }

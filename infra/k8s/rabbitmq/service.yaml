@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: paw-suite
+spec:
+  ports:
+  - port: 5672
+    name: amqp
+    targetPort: 5672
+    protocol: TCP
+  - port: 15672
+    name: management
+    targetPort: 15672
+    protocol: TCP
+  selector:
+    app: rabbitmq
+  type: ClusterIP

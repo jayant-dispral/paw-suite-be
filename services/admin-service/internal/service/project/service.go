@@ -72,7 +72,9 @@ func (s *ProjectService) CreateProject(ctx context.Context, ownerID primitive.Ob
 		AlertConfig:      req.AlertConfig,
 		TeamMembers:      []domain.TeamMember{}, //Empty for now; user can add later
 	}
-
+	project.NextScanAt = time.Now().Add(
+		time.Duration(project.MonitoringConfig.ScanFrequency) * time.Minute,
+	)
 	//create in databse
 	err = s.projectRepo.Create(ctx, project)
 	if err != nil {
