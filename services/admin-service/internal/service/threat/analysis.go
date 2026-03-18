@@ -44,7 +44,11 @@ var (
 		Timeout:   8 * time.Second,
 		Transport: insecureTransport(),
 	}
-	httpsDialer = &net.Dialer{Timeout: 5 * time.Second}
+	httpsDialer        = &net.Dialer{Timeout: 5 * time.Second}
+	dnsUpstreamServers = []string{
+		"1.1.1.1:53",
+		"8.8.8.8:53",
+	}
 
 	// ── Worker counts ──────────────────────────────────────────────────────
 	//
@@ -61,18 +65,19 @@ var (
 	// to proceed to enrichment even when they do NOT resolve A/AAAA records.
 	// These are checked via RDAP to catch "registered but dark" domains.
 	//
-	// TUNED: raised from 400→800 to surface more RDAP-only domains, matching
+	// TUNED: raised again to surface more registered-but-dark domains instead of
+	// silently dropping them from the scan.
 	// haveibeensquatted's approach of surfacing all registerable lookalikes.
-	maxNoDNSCandidates int64 = 800
+	maxNoDNSCandidates int64 = 5000
 
 	// minNoDNSPriority is the minimum algorithm priority to allow a no-DNS
 	// candidate into enrichment without A/AAAA resolution.
-	minNoDNSPriority = 75
+	minNoDNSPriority = 60
 
 	// minNoDNSLexicalRisk allows very close lookalikes to pass even if their
 	// priority is slightly lower.
-	minNoDNSLexicalRisk         = 0.85
-	minNoDNSPriorityWithLexical = 65
+	minNoDNSLexicalRisk         = 0.55
+	minNoDNSPriorityWithLexical = 45
 
 	// minSurfaceScoreDefault is the minimum score for surfacing.
 	//
@@ -88,7 +93,8 @@ var (
 	// A token bucket or semaphore of 20 is generally within acceptable bursts.
 	rdapWorkerCount = 20
 
-	dnsTimeoutFast = 2 * time.Second
+	dnsTimeoutFast = 900 * time.Millisecond
+	dnsTimeoutNS   = 700 * time.Millisecond
 
 	// FIX: dnsResolver used consistently in BOTH Stage 1 and Stage 2.
 	// The original lookupDNS() used net.DefaultResolver — inconsistent.
@@ -96,6 +102,12 @@ var (
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 			d := net.Dialer{Timeout: dnsTimeoutFast}
+			for _, server := range dnsUpstreamServers {
+				conn, err := d.DialContext(ctx, network, server)
+				if err == nil {
+					return conn, nil
+				}
+			}
 			return d.DialContext(ctx, network, address)
 		},
 	}
@@ -114,6 +126,9 @@ type baselineProfile struct {
 	Tokens           map[string]struct{}
 	BrandTerms       []string
 	FuzzyHash        string
+	Title            string
+	TitleTokens      map[string]struct{}
+	Technologies     map[string]struct{}
 }
 
 type rdapProfile struct {
@@ -174,7 +189,9 @@ func shouldEnrichWithoutA(candidate permutation) bool {
 	}
 	// High-conviction patterns that are worth checking even without A/AAAA.
 	switch candidate.Algorithm {
-	case "homoglyph", "homoglyph_double", "prefix_tld_combo":
+	case "homoglyph", "homoglyph_double", "prefix_tld_combo",
+		"omission", "transposition", "replacement", "ascii_similar",
+		"numeral_swap", "tld_replace", "sequence_swap":
 		return true
 	default:
 		return false
@@ -196,18 +213,18 @@ func analyzeProjectThreats(
 
 	// ── Stage 1: generate ALL permutations (pure CPU, ~50 ms) ─────────────────
 	all := generatePermutations(project.PrimaryDomain)
-	metrics.TotalGenerated = len(all)
 	if len(all) == 0 {
 		return nil, metrics
-	}
-	if onProgress != nil {
-		onProgress(scanProgressUpdate{Metrics: metrics})
 	}
 
 	// ── Stage 2: pre-score & cut — pure CPU, zero network ────────────────────
 	shortlisted := preScoreFilter(all)
+	metrics.TotalGenerated = len(shortlisted)
 	if len(shortlisted) == 0 {
 		return nil, metrics
+	}
+	if onProgress != nil {
+		onProgress(scanProgressUpdate{Metrics: metrics})
 	}
 
 	// ── Stages 3+4: DNS and enrichment run as a true pipeline ─────────────────
@@ -250,9 +267,7 @@ func analyzeProjectThreats(
 				if ctx.Err() != nil {
 					return
 				}
-				dnsCtx, cancel := context.WithTimeout(ctx, dnsTimeoutFast)
-				ips, ok := quickDNSCheck(dnsCtx, candidate.Domain)
-				cancel()
+				ips, ok := quickDNSCheck(ctx, candidate.Domain)
 
 				atomic.AddInt64(&dnsProcessed, 1)
 				cursorDomain.Store(candidate.Domain)
@@ -371,10 +386,8 @@ done:
 	}
 
 	sortThreats(allFindings)
-	// TUNED: raised from 500→1000 to match haveibeensquatted's volume
-	// (typically 200–600 results per domain scan).
-	if len(allFindings) > 1000 {
-		allFindings = allFindings[:1000]
+	if len(allFindings) > 5000 {
+		allFindings = allFindings[:5000]
 	}
 	metrics.SurfacedFindings = len(allFindings)
 	metrics.Suppressed = maxInt(0, metrics.EnrichedCandidates-len(allFindings))
@@ -405,10 +418,7 @@ func fastDNSFilterStreaming(
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			dnsCtx, cancel := context.WithTimeout(ctx, dnsTimeoutFast)
-			defer cancel()
-
-			ips, ok := quickDNSCheck(dnsCtx, candidates[i].Domain)
+			ips, ok := quickDNSCheck(ctx, candidates[i].Domain)
 			if ok {
 				resolvedCh <- resolvedCandidate{
 					perm:     candidates[i],
@@ -441,7 +451,9 @@ func fastDNSFilter(ctx context.Context, candidates []permutation) []resolvedCand
 	return out
 }
 
-// quickDNSCheck returns the resolved IPs and true if the domain has an A record.
+// quickDNSCheck returns resolved IPs and a presence flag.
+// A candidate is considered present if it either resolves A/AAAA or already
+// has delegated NS records. This catches registered but not-yet-live squats.
 //
 // FIX: homoglyph domains are stored as Unicode in permutation_v2.go
 // (e.g. "аcmecorp.com" with Cyrillic 'а'). net.Resolver cannot resolve
@@ -454,20 +466,28 @@ func quickDNSCheck(ctx context.Context, domainName string) ([]string, bool) {
 		ascii = domainName
 	}
 
-	addrs, err := dnsResolver.LookupIPAddr(ctx, ascii)
-	if err != nil || len(addrs) == 0 {
-		return nil, false
+	ipCtx, cancel := context.WithTimeout(ctx, dnsTimeoutFast)
+	addrs, err := dnsResolver.LookupIPAddr(ipCtx, ascii)
+	cancel()
+	if err == nil && len(addrs) > 0 {
+		ips := make([]string, 0, len(addrs))
+		for _, addr := range addrs {
+			if v4 := addr.IP.To4(); v4 != nil {
+				ips = append(ips, v4.String())
+			} else {
+				ips = append(ips, addr.IP.String())
+			}
+		}
+		return ips, true
 	}
 
-	ips := make([]string, 0, len(addrs))
-	for _, addr := range addrs {
-		if v4 := addr.IP.To4(); v4 != nil {
-			ips = append(ips, v4.String())
-		} else {
-			ips = append(ips, addr.IP.String())
-		}
+	nsCtx, cancel := context.WithTimeout(ctx, dnsTimeoutNS)
+	defer cancel()
+	if nsRecs, nsErr := dnsResolver.LookupNS(nsCtx, ascii); nsErr == nil && len(nsRecs) > 0 {
+		return nil, true
 	}
-	return ips, true
+
+	return nil, false
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -530,9 +550,13 @@ func enrichCandidate(
 	sslProfile := domain.ThreatSSLProfile{}
 	web := domain.ThreatWebProfile{}
 	webText := ""
+	titleSimilarity := 0.0
+	technologyOverlap := 0.0
 	if dnsProfile.Resolves {
 		sslProfile = inspectSSL(candidateCtx, candidate.Domain)
 		web, webText, _ = inspectWeb(candidateCtx, candidate.Domain, baseline.BrandTerms, baseline.Tokens, baseline.FuzzyHash)
+		titleSimilarity = stringSimilarity(baseline.Title, web.Title)
+		technologyOverlap = jaccardScore(baseline.Technologies, stringSliceSet(web.Technologies))
 	}
 
 	// ── Category classification ──────────────────────────────────────────────
@@ -565,7 +589,7 @@ func enrichCandidate(
 
 	// ── Score ────────────────────────────────────────────────────────────────
 	score, threatType, signals, olderThanPrimary, ageDeltaDays :=
-		scoreThreat(project, baseline, candidate, rdap, dnsProfile, sslProfile, web, candidateCategory, categorySimilarity)
+		scoreThreat(project, baseline, candidate, rdap, dnsProfile, sslProfile, web, candidateCategory, categorySimilarity, titleSimilarity, technologyOverlap)
 
 	minScore := minSurfaceScoreDefault
 	if rdap.IsRegistered || dnsProfile.HasMX || len(dnsProfile.NSRecords) > 0 {
@@ -675,6 +699,9 @@ func buildBaseline(ctx context.Context, project *domain.Project) baselineProfile
 		Tokens:           tokens,
 		BrandTerms:       terms,
 		FuzzyHash:        fuzzyHash,
+		Title:            webProfile.Title,
+		TitleTokens:      tokenSet(webProfile.Title),
+		Technologies:     stringSliceSet(webProfile.Technologies),
 	}
 }
 
@@ -875,6 +902,8 @@ func scoreThreat(
 	web domain.ThreatWebProfile,
 	candidateCategory string,
 	categorySimilarity float64,
+	titleSimilarity float64,
+	technologyOverlap float64,
 ) (int, domain.ThreatType, []domain.ThreatSignal, bool, int) {
 
 	signals := make([]domain.ThreatSignal, 0, 14)
@@ -1050,6 +1079,22 @@ func scoreThreat(
 			})
 			score += contentBoost
 		}
+	}
+	if titleSimilarity >= 60 {
+		titleBoost := minInt(18, int(titleSimilarity/5))
+		signals = append(signals, domain.ThreatSignal{
+			Signal: "title_similarity", Weight: titleBoost,
+			Detail: fmt.Sprintf("Page title format matches the protected domain at %.0f%%.", titleSimilarity),
+		})
+		score += titleBoost
+	}
+	if technologyOverlap >= 50 {
+		techBoost := minInt(12, int(technologyOverlap/8))
+		signals = append(signals, domain.ThreatSignal{
+			Signal: "technology_overlap", Weight: techBoost,
+			Detail: fmt.Sprintf("The site stack overlaps with the protected domain at %.0f%%.", technologyOverlap),
+		})
+		score += techBoost
 	}
 
 	// ── Business category signals ─────────────────────────────────────────────
@@ -1474,6 +1519,16 @@ func tokenSet(text string) map[string]struct{} {
 	return result
 }
 
+func stringSliceSet(values []string) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if normalized := strings.ToLower(strings.TrimSpace(value)); normalized != "" {
+			result[normalized] = struct{}{}
+		}
+	}
+	return result
+}
+
 func tokenize(text string) []string {
 	cleaned := nonWordRe.ReplaceAllString(strings.ToLower(text), " ")
 	cleaned = spaceRe.ReplaceAllString(cleaned, " ")
@@ -1624,6 +1679,9 @@ func dnsLegacyMap(profile domain.ThreatDNSProfile) map[string]string {
 
 func sortThreats(findings []domain.Threat) {
 	sort.Slice(findings, func(i, j int) bool {
+		if triageI, triageJ := triagePriority(findings[i]), triagePriority(findings[j]); triageI != triageJ {
+			return triageI > triageJ
+		}
 		if findings[i].Score != findings[j].Score {
 			return findings[i].Score > findings[j].Score
 		}
@@ -1635,6 +1693,49 @@ func sortThreats(findings []domain.Threat) {
 		}
 		return findings[i].DetectedAt.After(findings[j].DetectedAt)
 	})
+}
+
+func triagePriority(threat domain.Threat) int {
+	priority := 0
+
+	switch threat.Type {
+	case domain.ThreatPhishing:
+		priority += 45
+	case domain.ThreatImpersonation:
+		priority += 28
+	default:
+		priority += 14
+	}
+
+	if threat.Status == domain.ThreatActive || threat.Status == domain.ThreatAcknowledged {
+		priority += 8
+	}
+	if threat.Details.Web.HasLoginForm {
+		priority += 30
+	}
+	if threat.Details.DNS.HasMX {
+		priority += 18
+	}
+	if threat.Details.Web.IsLive {
+		priority += 15
+	}
+	if threat.Details.Web.LooksLikeBrand {
+		priority += 14
+	}
+	if threat.Details.Web.ContentSimilarity >= 50 || threat.Details.Web.FuzzyMatchScore >= 70 {
+		priority += 10
+	}
+	if threat.Details.RegistrationDate != nil {
+		priority += 6
+	}
+	if threat.Details.Web.IsParkingPage {
+		priority -= 12
+	}
+	if threat.Details.OlderThanPrimary {
+		priority -= 16
+	}
+
+	return priority
 }
 
 func cloneThreats(findings []domain.Threat) []domain.Threat {

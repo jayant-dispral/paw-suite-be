@@ -26,6 +26,7 @@ func main() {
 	// ============================================================
 	rabbitmqURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 	mongoURL := getEnv("MONGODB_DATABASE_URI", "mongodb://admin:password@mongo:27017/brand_threat?authSource=admin")
+	mongoDatabaseName := getEnv("MONGODB_DATABASE_NAME", "brand_threat")
 	exchangeName := getEnv("RABBITMQ_EXCHANGE", "brand_events")
 	queueName := getEnv("RABBITMQ_QUEUE", "data_service_queue")
 	routingKeys := []string{"brand.#"}
@@ -56,7 +57,7 @@ func main() {
 		log.Fatalf("❌ Failed to ping MongoDB: %v", err)
 	}
 
-	db := mongoClient.Database("brand_threat")
+	db := mongoClient.Database(mongoDatabaseName)
 	log.Println("✅ Connected to MongoDB")
 
 	// ============================================================

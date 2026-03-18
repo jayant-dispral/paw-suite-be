@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
+	"unicode"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -38,6 +40,9 @@ func ParseValidationError(err error) []ValidationErrorResponse {
 		for _, path := range fieldOrder {
 			errs := fieldErrors[path]
 			selectedErr := selectPriorityError(errs)
+			if shouldSkipValidationError(selectedErr) {
+				continue
+			}
 
 			out = append(out, ValidationErrorResponse{
 				Field:   path,
@@ -97,14 +102,70 @@ func selectPriorityError(errs []validator.FieldError) validator.FieldError {
 }
 
 func getFieldPath(fe validator.FieldError) string {
-	// fe.Namespace() returns the full path starting with the struct name
-	// e.g., "CreateProjectRequest.monitoring_config.scan_frequency"
-	// We strip the struct name to get the JSON path relative to the root.
-	ns := fe.Namespace()
+	ns := fe.StructNamespace()
 	if idx := strings.Index(ns, "."); idx != -1 {
-		return ns[idx+1:]
+		ns = ns[idx+1:]
 	}
-	return ns
+	return toSnakePath(ns)
+}
+
+func shouldSkipValidationError(fe validator.FieldError) bool {
+	if !isEmptyValue(fe.Value()) {
+		return false
+	}
+
+	switch fe.Tag() {
+	case "email", "url", "fqdn", "oneof", "timezone":
+		return true
+	default:
+		return false
+	}
+}
+
+func isEmptyValue(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.String, reflect.Array, reflect.Slice, reflect.Map:
+		return rv.Len() == 0
+	case reflect.Bool:
+		return !rv.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return rv.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return rv.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return rv.Float() == 0
+	case reflect.Interface, reflect.Ptr:
+		return rv.IsNil()
+	}
+	return false
+}
+
+func toSnakePath(value string) string {
+	parts := strings.Split(value, ".")
+	for i, part := range parts {
+		parts[i] = toSnake(part)
+	}
+	return strings.Join(parts, ".")
+}
+
+func toSnake(value string) string {
+	var b strings.Builder
+	for i, r := range value {
+		if unicode.IsUpper(r) {
+			if i > 0 {
+				b.WriteByte('_')
+			}
+			b.WriteRune(unicode.ToLower(r))
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func getErrorCode(fe validator.FieldError) string {

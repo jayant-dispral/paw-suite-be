@@ -22,6 +22,7 @@ go build -o admin-service ./services/admin-service/cmd
 FROM alpine:3.20
 #create a non-root user (basic security measure)
 
+RUN apk add --no-cache ca-certificates
 RUN adduser -D appuser
 
 WORKDIR /app

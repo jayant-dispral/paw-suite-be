@@ -562,11 +562,18 @@ func buildSummary(project *domain.Project, metrics scanMetrics, findings []domai
 	if metrics.SurfacedFindings > surfaced {
 		surfaced = metrics.SurfacedFindings
 	}
+	displayTotal := metrics.TotalGenerated
+	if metrics.ProcessedCandidates != metrics.TotalGenerated {
+		// Do not show a raw generated count to the UI if the scan did not actually
+		// process that full set. This avoids implying complete coverage when the
+		// backend only worked through a subset before returning.
+		displayTotal = 0
+	}
 
 	return ports.ThreatIntelSummary{
 		BrandName:            project.BrandName,
 		ProtectedDomain:      project.PrimaryDomain,
-		TotalGenerated:       metrics.TotalGenerated,
+		TotalGenerated:       displayTotal,
 		ValidCandidates:      metrics.ValidCandidates,
 		EnrichedCandidates:   metrics.EnrichedCandidates,
 		SuppressedCandidates: metrics.Suppressed,
@@ -685,18 +692,20 @@ func mergeThreats(existing []domain.Threat, latest []domain.Threat) []domain.Thr
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  expiryForStatus — canonical definition (shared with analysis.go)
+//
+//	expiryForStatus — canonical definition (shared with analysis.go)
+//
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // FIX: analysis.go also defined this function with different semantics.
 // Canonical version lives here. analysis.go no longer defines it.
 //
-//   Active         → re-check in 1 month
-//   Acknowledged   → re-check in 1 month (still live, team is just aware)
-//   Whitelisted    → effectively permanent (10 years)
-//   Resolved       → audit trail for 2 months
-//   FalsePositive  → audit trail for 2 months
-//   default        → 1 month (safe fallback)
+//	Active         → re-check in 1 month
+//	Acknowledged   → re-check in 1 month (still live, team is just aware)
+//	Whitelisted    → effectively permanent (10 years)
+//	Resolved       → audit trail for 2 months
+//	FalsePositive  → audit trail for 2 months
+//	default        → 1 month (safe fallback)
 func expiryForStatus(status domain.ThreatStatus, now time.Time) time.Time {
 	switch status {
 	case domain.ThreatActive, domain.ThreatAcknowledged:

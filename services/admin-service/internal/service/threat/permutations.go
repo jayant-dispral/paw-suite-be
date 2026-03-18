@@ -438,14 +438,15 @@ func preScoreFilter(perms []permutation) []permutation {
 	}
 
 	const (
-		// TUNED: check ALL permutations for DNS — matching haveibeensquatted.
-		maxDNSCandidates = 9999999 // Cap removed per user request
+		// Process the full generated space for normal brand domains.
+		// Only fall back to a hard cap for exceptionally large domains.
+		maxDNSCandidates = 50000
 
 		// Lowered from 0.70 to 0.45 — catches more single-char mutations.
 		highSimilarity float64 = 0.45
 
 		// Lowered from 70/0.50 to 50/0.30 — lets addition/insertion through.
-		highPriorityAlg             = 50
+		highPriorityAlg                     = 50
 		minSimilarityForPriorityAlg float64 = 0.30
 	)
 
@@ -486,10 +487,17 @@ func preScoreFilter(perms []permutation) []permutation {
 			alwaysCheck[p.Algorithm]
 
 		if !keep {
-			continue
+			// Still include the remainder of the generated space for regular-sized
+			// scans so we do not silently under-process the permutation set.
+			if len(perms) > maxDNSCandidates {
+				continue
+			}
 		}
 
-		score := p.LexicalRisk*30 + float64(p.Priority)/5
+		score := p.LexicalRisk*40 + float64(p.Priority)/4 + algorithmSelectionBoost(p.Algorithm)
+		if obscureTLDs[p.TLD] {
+			score -= 6
+		}
 		candidates = append(candidates, scored{p: p, score: score})
 	}
 
@@ -504,17 +512,78 @@ func preScoreFilter(perms []permutation) []permutation {
 		return candidates[i].score > candidates[j].score
 	})
 
-	if len(candidates) > maxDNSCandidates {
-		candidates = candidates[:maxDNSCandidates]
+	if len(candidates) <= maxDNSCandidates {
+		out := make([]permutation, 0, len(candidates))
+		for _, candidate := range candidates {
+			out = append(out, candidate.p)
+		}
+		return out
 	}
 
-	out := make([]permutation, len(candidates))
-	for i, c := range candidates {
-		out[i] = c.p
+	out := make([]permutation, 0, min(len(candidates), maxDNSCandidates))
+	byAlgorithm := make(map[string]int, 16)
+
+	for _, candidate := range candidates {
+		quota := algorithmQuota(candidate.p.Algorithm)
+		if byAlgorithm[candidate.p.Algorithm] >= quota {
+			continue
+		}
+		byAlgorithm[candidate.p.Algorithm]++
+		out = append(out, candidate.p)
+		if len(out) >= maxDNSCandidates {
+			break
+		}
+	}
+
+	if len(out) == 0 {
+		limit := min(len(candidates), maxDNSCandidates)
+		out = make([]permutation, 0, limit)
+		for i := 0; i < limit; i++ {
+			out = append(out, candidates[i].p)
+		}
 	}
 	return out
 }
 
+func algorithmSelectionBoost(algorithm string) float64 {
+	switch algorithm {
+	case "homoglyph", "homoglyph_double":
+		return 24
+	case "omission", "transposition", "replacement", "ascii_similar", "numeral_swap":
+		return 18
+	case "tld_replace", "sequence_swap", "prefix_tld_combo":
+		return 16
+	case "bitsquatting", "repetition", "double_hit":
+		return 10
+	case "prefix", "suffix", "prefix_compaction", "suffix_compaction":
+		return 6
+	case "insertion", "addition", "keyboard_insertion":
+		return 4
+	default:
+		return 0
+	}
+}
+
+func algorithmQuota(algorithm string) int {
+	switch algorithm {
+	case "homoglyph":
+		return 1100
+	case "homoglyph_double":
+		return 800
+	case "omission", "transposition", "replacement", "ascii_similar", "numeral_swap":
+		return 650
+	case "tld_replace", "sequence_swap", "prefix_tld_combo", "repetition", "double_hit":
+		return 450
+	case "bitsquatting", "vowel_swap", "addition", "insertion", "keyboard_insertion":
+		return 350
+	case "prefix", "suffix":
+		return 275
+	case "prefix_compaction", "suffix_compaction", "www_hyphen", "www_compaction":
+		return 160
+	default:
+		return 220
+	}
+}
 
 var qwertyKeyboard = map[rune][]rune{
 	'a': {'q', 'w', 's', 'z'},

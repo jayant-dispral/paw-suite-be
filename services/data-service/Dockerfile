@@ -22,6 +22,7 @@ go build -o data-service ./services/data-service/cmd
 FROM alpine:3.20
 #create a non-root user (basic security measure)
 
+RUN apk add --no-cache ca-certificates
 RUN adduser -D appuser
 
 WORKDIR /app
@@ -32,8 +33,8 @@ COPY --from=builder /app/data-service .
 # user non root user
 USER appuser
 
-#expose port for documentation and not for networking 
-EXPOSE 8080
+#expose port for documentation and not for networking
+EXPOSE 8081
 
 #run binary
 ENTRYPOINT [ "./data-service" ]
