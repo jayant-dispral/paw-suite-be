@@ -16,6 +16,7 @@ import (
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/auth"
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/project"
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/social_post"
+	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/threat"
 	"github.com/jayant-dispral/brand-threat-be/services/admin-service/internal/service/user"
 )
 
@@ -83,11 +84,14 @@ func main() {
 	userRepo := mongo.NewUserRepository(db)
 	projectRepo := mongo.NewProjectRepository(db)
 	socialPostRepo := mongo.NewSocialPostRepository(db)
+	threatRepo := mongo.NewThreatRepository(db)
+	threatScanStateRepo := mongo.NewThreatScanStateRepository(db)
 
 	authService := auth.NewService(userRepo, cfg.JWTSecret)
 	userService := user.NewService(userRepo)
 	projectService := project.NewProjectService(projectRepo, userRepo)
 	socialPostService := social_post.NewSocialPostService(socialPostRepo, projectRepo)
+	threatService := threat.NewThreatService(threatRepo, threatScanStateRepo, projectRepo)
 
 	// ------------------------------------------------
 	// 7. HTTP Handlers + Router
@@ -96,8 +100,9 @@ func main() {
 	userHandler := apiHandler.NewUserHandler(userService)
 	projectHandler := apiHandler.NewProjectHandler(projectService)
 	socialPostHandler := apiHandler.NewSocialPostHandler(socialPostService)
+	threatHandler := apiHandler.NewThreatHandler(threatService)
 
-	router := apiHandler.NewRouter(authHandler, userHandler, projectHandler, socialPostHandler)
+	router := apiHandler.NewRouter(authHandler, userHandler, projectHandler, socialPostHandler, threatHandler)
 
 	// ------------------------------------------------
 	// 8. Scheduler (background worker)
@@ -119,11 +124,24 @@ func main() {
 	// 9. HTTP Server
 	// ------------------------------------------------
 	server := &http.Server{
-		Addr:         ":" + cfg.ServerPort,
-		Handler:      router,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:        ":" + cfg.ServerPort,
+		Handler:     router,
+		ReadTimeout: 15 * time.Second,
+
+		// FIX: WriteTimeout was 10 seconds. The threat scan pipeline runs for
+		// up to scanTimeout (10 minutes) and GET /threats polls scan progress
+		// during that window. A 10s WriteTimeout kills the connection before
+		// the first scan result arrives, returning a broken response to the
+		// client. Set to 0 to disable the per-connection write deadline and
+		// rely instead on the per-request middleware.Timeout(60s) for normal
+		// endpoints. Long-running scan poll requests manage their own deadline
+		// via the scan context inside analyzeProjectThreats.
+		//
+		// If a hard server-level cap is required, set this to slightly above
+		// scanTimeout, e.g. 11 * time.Minute.
+		WriteTimeout: 0,
+
+		IdleTimeout: 120 * time.Second,
 	}
 
 	// Shutdown HTTP server when context is cancelled
@@ -151,12 +169,6 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// getEnvDuration retrieves duration from environment variable with fallback
-func getEnvDuration(key string, fallback time.Duration) time.Duration {
-	if value := os.Getenv(key); value != "" {
-		if d, err := time.ParseDuration(value); err == nil {
-			return d
-		}
-	}
-	return fallback
-}
+// FIX: getEnvDuration was declared but never called in the original main.go.
+// Removed to eliminate dead code. If duration-based env vars are needed in
+// future (e.g. configurable scan timeout), add them at that point.

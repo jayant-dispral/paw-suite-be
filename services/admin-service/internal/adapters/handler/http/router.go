@@ -11,7 +11,7 @@ import (
 )
 
 // NewRouter initializes the main Chi router and mounts all sub-routers
-func NewRouter(authHandler *AuthHandler, userHandler *UserHandler, projectHandler *ProjectHandler, socialPostHandler *SocialPostHandler) *chi.Mux {
+func NewRouter(authHandler *AuthHandler, userHandler *UserHandler, projectHandler *ProjectHandler, socialPostHandler *SocialPostHandler, threatHandler *ThreatHandler) *chi.Mux {
 	r := chi.NewRouter()
 
 	// 1. Global Middleware (Applied to ALL requests)
@@ -23,7 +23,8 @@ func NewRouter(authHandler *AuthHandler, userHandler *UserHandler, projectHandle
 
 	// Basic CORS Setup (Crucial for Frontend integration)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"}, // Change to your frontend URL in production
+		// Explicit dev origins avoid browsers rejecting wildcard when credentials are allowed
+		AllowedOrigins:   []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		ExposedHeaders:   []string{"Link"},
@@ -33,6 +34,7 @@ func NewRouter(authHandler *AuthHandler, userHandler *UserHandler, projectHandle
 
 	r.Use(SecureHeaders)
 	r.Use(LimitBodySize(1024 * 1024))
+
 	// 2. Base Health Check
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Sentinel API is running 🛡️"))
@@ -44,41 +46,25 @@ func NewRouter(authHandler *AuthHandler, userHandler *UserHandler, projectHandle
 
 	// 3. Mount API Versions
 	r.Route("/api/v1", func(r chi.Router) {
-		// Mount the Auth sub-router
 		r.Mount("/auth", authRoutes(authHandler))
-
 		r.Mount("/users", userRoutes(userHandler, &authHandler.service))
-
 		r.Mount("/projects", projectRoutes(projectHandler, &authHandler.service))
-
-		// Social posts routes - nested under projects
 		r.Mount("/projects/{projectID}/posts", socialPostRoutes(socialPostHandler, &authHandler.service))
+		r.Mount("/projects/{projectID}/threats", threatRoutes(threatHandler, &authHandler.service))
 	})
 
 	return r
 }
 
-// authRoutes defines the sub-routes for Authentication
 func authRoutes(h *AuthHandler) http.Handler {
 	r := chi.NewRouter()
-
 	r.Post("/register", h.Register)
 	r.Post("/login", h.Login)
-
-	// Example of grouped middleware specific to Auth
-	// r.Group(func(r chi.Router) {
-	//     r.Use(MyCustomAuthMiddleware)
-	//     r.Post("/refresh", h.RefreshToken)
-	// })
-
 	return r
 }
 
-// userRoutes defienes the user routes
 func userRoutes(h *UserHandler, AuthSVC *ports.AuthService) http.Handler {
 	r := chi.NewRouter()
-
-	//auth middleware
 	r.Use(AuthMiddleware(*AuthSVC))
 	r.Get("/search", h.SearchByEmail)
 	r.Get("/me", h.GetMe)
@@ -86,11 +72,8 @@ func userRoutes(h *UserHandler, AuthSVC *ports.AuthService) http.Handler {
 	return r
 }
 
-// projectRoutes defines the project routes
 func projectRoutes(h *ProjectHandler, AuthSVC *ports.AuthService) http.Handler {
 	r := chi.NewRouter()
-
-	//auth middleware
 	r.Use(AuthMiddleware(*AuthSVC))
 	r.Post("/", h.CreateProject)
 	r.Get("/", h.GetMyProjects)
@@ -107,26 +90,34 @@ func projectRoutes(h *ProjectHandler, AuthSVC *ports.AuthService) http.Handler {
 	return r
 }
 
-// socialPostRoutes defines the routes for social posts
 func socialPostRoutes(h *SocialPostHandler, AuthSVC *ports.AuthService) http.Handler {
 	r := chi.NewRouter()
-
-	// Auth middleware for all routes
 	r.Use(AuthMiddleware(*AuthSVC))
-
-	// CRUD operations
 	r.Get("/", h.GetPosts)
 	r.Get("/{postID}", h.GetPost)
-
-	// Filtering
 	r.Get("/sentiment/{sentiment}", h.GetPostsBySentiment)
 	r.Get("/viral", h.GetViralPosts)
 	r.Get("/keyword/{keyword}", h.GetPostsByKeyword)
 	r.Get("/stats", h.GetPostStats)
-
-	// Ingestion (for data-service)
 	r.Post("/", h.IngestPost)
 	r.Post("/bulk", h.BulkIngestPosts)
+	return r
+}
+
+func threatRoutes(h *ThreatHandler, AuthSVC *ports.AuthService) http.Handler {
+	r := chi.NewRouter()
+	r.Use(AuthMiddleware(*AuthSVC))
+
+	r.Get("/", h.GetThreatIntel)
+	r.Post("/refresh", h.RefreshThreatIntel)
+	r.Put("/{threatID}/resolve", h.ResolveThreat)
+	r.Put("/{threatID}/ignore", h.IgnoreThreat)
+	// FIX: WhitelistThreat and AcknowledgeThreat handlers were added to
+	// http/threat.go when ThreatWhitelisted and ThreatAcknowledged were
+	// added to the domain and service, but these two routes were never
+	// registered here, making both endpoints unreachable (404).
+	r.Put("/{threatID}/whitelist", h.WhitelistThreat)
+	r.Put("/{threatID}/acknowledge", h.AcknowledgeThreat)
 
 	return r
 }
